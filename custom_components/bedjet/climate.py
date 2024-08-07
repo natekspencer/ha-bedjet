@@ -25,25 +25,29 @@ from bleak.backends.device import BLEDevice
 
 _LOGGER = logging.getLogger(__name__)
 
+DISCOVERY_INTERVAL = 60  # seconds
+
 async def discover(hass):
-    service_infos = bluetooth.async_discovered_service_info(
-        hass, connectable=True)
+    while True:
+        service_infos = bluetooth.async_discovered_service_info(
+            hass, connectable=True)
 
-    bedjet_devices = [
-        service_info.device for service_info in service_infos if 'BEDJET' in service_info.name
-    ]
+        bedjet_devices = [
+            service_info.device for service_info in service_infos if 'BEDJET' in service_info.name
+        ]
 
-    if not bedjet_devices:
-        _LOGGER.warning("No BedJet devices were discovered.")
-        return []
-    
-    _LOGGER.info(
-        f'Found {len(bedjet_devices)} BedJet{"" if len(bedjet_devices) == 1 else "s"}: {", ".join([d.address for d in bedjet_devices])}.'
-    )
+        if not bedjet_devices:
+            _LOGGER.warning("No BedJet devices were discovered.")
+        else:
+            _LOGGER.info(
+                f'Found {len(bedjet_devices)} BedJet{"" if len(bedjet_devices) == 1 else "s"}: {", ".join([d.address for d in bedjet_devices])}.'
+            )
 
-    bedjets = [BedjetDeviceEntity(device) for idx, device in enumerate(bedjet_devices)]
+        bedjets = [BedjetDeviceEntity(device) for idx, device in enumerate(bedjet_devices)]
+        if bedjets:
+            return bedjets
 
-    return bedjets
+        await asyncio.sleep(DISCOVERY_INTERVAL)
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
     mac = config_entry.data.get(CONF_MAC)
