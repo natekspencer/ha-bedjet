@@ -1,0 +1,17 @@
+{
+  "entity": {
+    "number": {
+      "runtime_remaining": {
+        "name": "Runtime remaining"
+      }
+    },
+    "sensor": {
+      "ambient_temperature": {
+        "name": "Ambient temperature"
+      },
+      "runtime_remaining": {
+        "name": "Runtime remaining"
+      }
+    }
+  }
+}

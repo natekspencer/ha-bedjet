@@ -1,9 +1,16 @@
 {
-    "domain": "bedjet",
-    "name": "BedJet",
-    "documentation": "https://github.com/asheliahut/ha-bedjet",
-    "dependencies": [],
-    "codeowners": ["@asheliahut"],
-    "version": "0.3.0",
-    "config_flow": true
+  "domain": "bedjet",
+  "name": "BedJet",
+  "bluetooth": [
+    {
+      "local_name": "BEDJET_V3",
+      "service_uuid": "00001000-bed0-0080-aa55-4265644a6574",
+      "connectable": true
+    }
+  ],
+  "codeowners": ["@natekspencer"],
+  "config_flow": true,
+  "dependencies": ["bluetooth_adapters"],
+  "documentation": "https://github.com/natekspencer/ha-bedjet",
+  "version": "0.0.0"
 }

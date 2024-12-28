@@ -1,0 +1,12 @@
+# Home Assistant
+homeassistant>=2024.5.0
+numpy
+python-dateutil
+pyturbojpeg
+
+# Integration
+
+# Development
+colorlog
+pip>=21.0
+ruff>=0.3.0

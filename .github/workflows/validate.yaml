@@ -1,0 +1,22 @@
+name: Validate repo
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "0 0 * * *"
+
+jobs:
+  hassfest:
+    name: Validate with hassfest
+    runs-on: "ubuntu-latest"
+    steps:
+      - uses: "actions/checkout@v4"
+      - uses: "home-assistant/actions/hassfest@master"
+  hacs:
+    name: Validate with HACS
+    runs-on: "ubuntu-latest"
+    steps:
+      - uses: "hacs/action@main"
+        with:
+          category: "integration"
