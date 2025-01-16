@@ -6,14 +6,12 @@ import logging
 from math import ceil
 
 from homeassistant.components.number import NumberDeviceClass, NumberEntity, NumberMode
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfTime
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
-from . import BedJetData
-from .const import DOMAIN
+from . import BedJetConfigEntry
 from .entity import BedJetEntity
 from .pybedjet import BedJet
 
@@ -22,11 +20,11 @@ _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: BedJetConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the number platform for BedJet."""
-    data: BedJetData = hass.data[DOMAIN][entry.entry_id]
+    data = entry.runtime_data
     async_add_entities([BedJetNumberEntity(data.coordinator, data.device, entry.title)])
 
 

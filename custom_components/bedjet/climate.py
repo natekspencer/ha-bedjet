@@ -10,14 +10,12 @@ from homeassistant.components.climate import (
     ClimateEntityFeature,
     HVACMode,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
-from . import BedJetData
-from .const import DOMAIN
+from . import BedJetConfigEntry
 from .entity import BedJetEntity
 from .pybedjet import BedJet, BedJetButton, BedJetCommand, OperatingMode
 
@@ -66,11 +64,11 @@ BIORHYTHM_PRESETS = (
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: BedJetConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the climate platform for BedJet."""
-    data: BedJetData = hass.data[DOMAIN][entry.entry_id]
+    data = entry.runtime_data
     async_add_entities(
         [BedJetClimateEntity(data.coordinator, data.device, entry.title)]
     )
