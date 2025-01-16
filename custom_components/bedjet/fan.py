@@ -6,13 +6,11 @@ import logging
 from typing import Any
 
 from homeassistant.components.fan import FanEntity, FanEntityFeature
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
-from . import BedJetData
-from .const import DOMAIN
+from . import BedJetConfigEntry
 from .entity import BedJetEntity
 from .pybedjet import BedJet, OperatingMode
 
@@ -21,11 +19,11 @@ _LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: BedJetConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the fan platform for BedJet."""
-    data: BedJetData = hass.data[DOMAIN][entry.entry_id]
+    data = entry.runtime_data
     async_add_entities([BedJetFanEntity(data.coordinator, data.device, entry.title)])
 
 

@@ -17,7 +17,7 @@ from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .const import DEVICE_TIMEOUT, DOMAIN, UPDATE_SECONDS
+from .const import DEVICE_TIMEOUT, UPDATE_SECONDS
 from .pybedjet import BedJet
 
 PLATFORMS: list[Platform] = [
@@ -39,7 +39,10 @@ class BedJetData:
     coordinator: DataUpdateCoordinator[None]
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+type BedJetConfigEntry = ConfigEntry[BedJetData]
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: BedJetConfigEntry) -> bool:
     """Set up BedJet from a config entry."""
     address: str = entry.data[CONF_ADDRESS]
     ble_device = bluetooth.async_ble_device_from_address(hass, address.upper(), True)
@@ -104,9 +107,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     finally:
         cancel_first_update()
 
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = BedJetData(
-        entry.title, bedjet, coordinator
-    )
+    entry.runtime_data = BedJetData(entry.title, bedjet, coordinator)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
@@ -120,6 +121,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_unload_entry(hass: HomeAssistant, entry: BedJetConfigEntry) -> bool:
     """Unload a config entry."""
+    await entry.runtime_data.device.stop()
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
