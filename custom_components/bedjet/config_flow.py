@@ -5,26 +5,22 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import voluptuous as vol
 from bleak_retry_connector import BLEAK_RETRY_EXCEPTIONS as BLEAK_EXCEPTIONS
 from bluetooth_data_tools import human_readable_name
+import voluptuous as vol
+
 from homeassistant.components.bluetooth import (
     BluetoothServiceInfoBleak,
     async_discovered_service_info,
 )
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
-from homeassistant.const import CONF_ADDRESS, CONF_MAC
+from homeassistant.const import CONF_ADDRESS
 
 from .const import DOMAIN
 from .pybedjet import BedJet
 
 _LOGGER = logging.getLogger(__name__)
 
-DEVICE_SCHEMA = vol.Schema(
-    {
-        vol.Optional(CONF_MAC): str,
-    }
-)
 LOCAL_NAMES = {"BEDJET_V3"}
 
 

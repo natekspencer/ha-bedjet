@@ -28,14 +28,6 @@ This project provides various entities to allow control of a [BedJet](https://be
    - On Hassio the final location will be `/config/custom_components/bedjet`
    - On Hassbian the final location will be `/home/homeassistant/.homeassistant/custom_components/bedjet`
 
-## Configuration
-
-Follow the configuration flow in devices & services
-
-Configuration variables:
-
-- **mac** (_Optional_): Bluetooth MAC address of your BedJet, if you want to specify. If not specified, this integration will search for all BedJets within range.
-
 ## Screenshot
 
 ![screenshot](https://i.imgur.com/Y836CWU.png)

@@ -1,0 +1,15 @@
+[tool.ruff.lint.isort]
+force-sort-within-sections = true
+known-first-party = ["homeassistant", "tests"]
+forced-separate = ["tests"]
+combine-as-imports = true
+split-on-trailing-comma = false
+
+[tool.pylint."MESSAGES CONTROL"]
+# abstract-method - with intro of async there are always methods missing
+# unused-argument - generic callbacks and setup methods create a lot of warnings
+disable = [
+    "abstract-method",
+    "unexpected-keyword-arg",
+    "unused-argument",
+]

@@ -1,10 +1,11 @@
 # Home Assistant
-homeassistant>=2024.5.0
+homeassistant>=2025.1.0
 numpy
 python-dateutil
 pyturbojpeg
 
 # Integration
+bluetooth_adapters
 
 # Development
 colorlog

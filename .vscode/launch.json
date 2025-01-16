@@ -15,8 +15,10 @@
       "name": "Python: Attach Local",
       "type": "debugpy",
       "request": "attach",
-      "port": 5678,
-      "host": "localhost",
+      "connect": {
+        "host": "localhost",
+        "port": 5678
+      },
       "justMyCode": false,
       "pathMappings": [
         {
@@ -30,8 +32,10 @@
       "name": "Python: Attach Remote",
       "type": "debugpy",
       "request": "attach",
-      "port": 5678,
-      "host": "homeassistant.local",
+      "connect": {
+        "host": "homeassistant.local",
+        "port": 5678
+      },
       "pathMappings": [
         {
           "localRoot": "${workspaceFolder}",
