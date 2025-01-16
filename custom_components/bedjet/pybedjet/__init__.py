@@ -165,6 +165,15 @@ class BedJet:
             return self._advertisement_data.rssi
         return None
 
+    async def set_clock(self, hour: int, minute: int) -> None:
+        """Set the clock."""
+        if not 0 <= hour <= 23:
+            raise ValueError(f"Invalid hour: {hour} (range is [0, 23])")
+        if not 0 <= minute <= 59:
+            raise ValueError(f"Invalid minute: {minute} (range is [0, 59])")
+        command = bytearray((BedJetCommand.SET_CLOCK, hour, minute))
+        await self._send_command(command)
+
     async def set_fan_speed(self, fan_speed: int) -> None:
         """Set fan speed."""
         command = bytearray((BedJetCommand.SET_FAN, int(fan_speed / 5) - 1))
@@ -294,7 +303,7 @@ class BedJet:
         self._state = BedJetState(
             current_temperature,
             target_temperature,
-            OperatingMode(operating_mode),
+            operating_mode,
             runtime_remaining,
             maximum_runtime,
             fan_speed,

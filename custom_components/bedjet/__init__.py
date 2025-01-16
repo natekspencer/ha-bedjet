@@ -21,6 +21,7 @@ from .const import DEVICE_TIMEOUT, UPDATE_SECONDS
 from .pybedjet import BedJet
 
 PLATFORMS: list[Platform] = [
+    Platform.BUTTON,
     Platform.CLIMATE,
     Platform.FAN,
     Platform.NUMBER,
