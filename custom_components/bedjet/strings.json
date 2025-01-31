@@ -1,4 +1,21 @@
 {
+  "config": {
+    "abort": {
+      "cannot_connect": "Failed to connect",
+      "no_devices_found": "No devices found on the network"
+    },
+    "step": {
+      "bluetooth_confirm": {
+        "description": "Do you want to set up {name}?"
+      },
+      "user": {
+        "data": {
+          "address": "BedJet"
+        },
+        "description": "Choose a BedJet to set up"
+      }
+    }
+  },
   "entity": {
     "button": {
       "sync_clock": {
