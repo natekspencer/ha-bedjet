@@ -86,7 +86,7 @@ class BedJet:
         self._operation_lock = asyncio.Lock()
         self._state = BedJetState()
         self._connect_lock: asyncio.Lock = asyncio.Lock()
-        self._disconnect_timer: asyncio.TimerHandle | None = None
+        self._auto_disconnect_timer: asyncio.TimerHandle | None = None
         self._client: BleakClientWithServiceCache | None = None
         self._expected_disconnect = False
         self.loop = asyncio.get_running_loop()
@@ -211,9 +211,9 @@ class BedJet:
         while self._state.current_temperature == 0:
             await asyncio.sleep(0.1)
 
-    async def stop(self) -> None:
-        """Stop the BedJet."""
-        _LOGGER.debug("%s: Stop", self.name)
+    async def disconnect(self) -> None:
+        """Disconnect from the BedJet."""
+        _LOGGER.debug("%s: Disconnect", self.name)
         await self._execute_disconnect()
 
     def _fire_callbacks(self) -> None:
@@ -364,11 +364,11 @@ class BedJet:
 
     def _reset_disconnect_timer(self) -> None:
         """Reset disconnect timer."""
-        if self._disconnect_timer:
-            self._disconnect_timer.cancel()
+        if self._auto_disconnect_timer:
+            self._auto_disconnect_timer.cancel()
         self._expected_disconnect = False
-        self._disconnect_timer = self.loop.call_later(
-            DISCONNECT_DELAY, self._disconnect
+        self._auto_disconnect_timer = self.loop.call_later(
+            DISCONNECT_DELAY, self._auto_disconnect
         )
 
     def _disconnected(self, client: BleakClientWithServiceCache) -> None:
@@ -384,9 +384,9 @@ class BedJet:
             self.rssi,
         )
 
-    def _disconnect(self) -> None:
-        """Disconnect from device."""
-        self._disconnect_timer = None
+    def _auto_disconnect(self) -> None:
+        """Disconnect from device automatically."""
+        self._auto_disconnect_timer = None
         asyncio.create_task(self._execute_timed_disconnect())
 
     async def _execute_timed_disconnect(self) -> None:
@@ -400,6 +400,8 @@ class BedJet:
 
     async def _execute_disconnect(self) -> None:
         """Execute disconnection."""
+        if self._auto_disconnect_timer:
+            self._auto_disconnect_timer.cancel()
         async with self._connect_lock:
             client = self._client
             self._expected_disconnect = True

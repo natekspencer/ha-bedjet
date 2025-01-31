@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from bleak.backends.device import BLEDevice
 from bleak_retry_connector import BLEAK_RETRY_EXCEPTIONS as BLEAK_EXCEPTIONS
 from bluetooth_data_tools import human_readable_name
 import voluptuous as vol
@@ -24,6 +25,21 @@ _LOGGER = logging.getLogger(__name__)
 LOCAL_NAMES = {"BEDJET_V3"}
 
 
+async def connect_bedjet(device: BLEDevice) -> tuple[bool, str]:
+    """Connect to a BedJet and return return status and success or error."""
+    bedjet = BedJet(device)
+    try:
+        await bedjet.update()
+    except BLEAK_EXCEPTIONS:
+        return (False, "cannot_connect")
+    except Exception:
+        _LOGGER.exception("Unexpected error")
+        return (False, "unknown")
+    finally:
+        await bedjet.disconnect()
+    return (True, bedjet.name)
+
+
 class BedjetDeviceConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for BedJet."""
 
@@ -38,15 +54,35 @@ class BedjetDeviceConfigFlow(ConfigFlow, domain=DOMAIN):
         self, discovery_info: BluetoothServiceInfoBleak
     ) -> ConfigFlowResult:
         """Handle the bluetooth discovery step."""
+        _LOGGER.debug("Discovered BT device: %s", discovery_info)
         await self.async_set_unique_id(discovery_info.address)
         self._abort_if_unique_id_configured()
+
+        success, name = await connect_bedjet(discovery_info.device)
+        if not success:
+            return self.async_abort(reason=name)
+
+        name = human_readable_name(name, discovery_info.name, discovery_info.address)
+        self.context["title_placeholders"] = {"name": name}
         self._discovery_info = discovery_info
-        self.context["title_placeholders"] = {
-            "name": human_readable_name(
-                None, discovery_info.name, discovery_info.address
+
+        return await self.async_step_bluetooth_confirm()
+
+    async def async_step_bluetooth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Confirm discovery."""
+        if user_input is not None:
+            return self.async_create_entry(
+                title=self.context["title_placeholders"]["name"],
+                data={CONF_ADDRESS: self._discovery_info.address},
             )
-        }
-        return await self.async_step_user()
+
+        self._set_confirm_only()
+        return self.async_show_form(
+            step_id="bluetooth_confirm",
+            description_placeholders=self.context["title_placeholders"],
+        )
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -57,27 +93,18 @@ class BedjetDeviceConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             address = user_input[CONF_ADDRESS]
             discovery_info = self._discovered_devices[address]
-            local_name = discovery_info.name
+            # local_name = discovery_info.name
             await self.async_set_unique_id(
                 discovery_info.address, raise_on_progress=False
             )
             self._abort_if_unique_id_configured()
-            bedjet = BedJet(discovery_info.device)
-            try:
-                await bedjet.update()
-            except BLEAK_EXCEPTIONS:
-                errors["base"] = "cannot_connect"
-            except Exception:
-                _LOGGER.exception("Unexpected error")
-                errors["base"] = "unknown"
-            else:
-                await bedjet.stop()
+            success, name = await connect_bedjet(discovery_info.device)
+            if success:
                 return self.async_create_entry(
-                    title=bedjet.name,
-                    data={
-                        CONF_ADDRESS: discovery_info.address,
-                    },
+                    title=name,
+                    data={CONF_ADDRESS: discovery_info.address},
                 )
+            errors["base"] = name
 
         if discovery := self._discovery_info:
             self._discovered_devices[discovery.address] = discovery

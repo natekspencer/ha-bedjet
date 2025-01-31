@@ -114,7 +114,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: BedJetConfigEntry) -> bo
 
     async def _async_stop(event: Event) -> None:
         """Close the connection."""
-        await bedjet.stop()
+        await bedjet.disconnect()
 
     entry.async_on_unload(
         hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, _async_stop)
@@ -124,5 +124,5 @@ async def async_setup_entry(hass: HomeAssistant, entry: BedJetConfigEntry) -> bo
 
 async def async_unload_entry(hass: HomeAssistant, entry: BedJetConfigEntry) -> bool:
     """Unload a config entry."""
-    await entry.runtime_data.device.stop()
+    await entry.runtime_data.device.disconnect()
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
