@@ -53,6 +53,10 @@ class BedJetButton(IntEnum):
     DEBUG_OFF = 0x41
     CONNECTION_TEST = 0x42
     UPDATE_FIRMWARE = 0x43
+    LED_ON = 0x46
+    LED_OFF = 0x47
+    MUTE = 0x48
+    UNMUTE = 0x49
     NOTIFY_ACK = 0x52
 
     BIORHYTHM_1 = 0x80

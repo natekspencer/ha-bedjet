@@ -242,6 +242,22 @@ class BedJet:
         command = bytearray((BedJetCommand.SET_FAN, int(fan_speed / 5) - 1))
         await self._send_command(command)
 
+    async def set_led(self, led: bool) -> None:
+        """Set muted."""
+        button = BedJetButton.LED_ON if led else BedJetButton.LED_OFF
+        command = bytearray((BedJetCommand.BUTTON, button))
+        await self._send_command(command)
+        self._led_enabled = led
+        self._fire_callbacks(True)
+
+    async def set_muted(self, muted: bool) -> None:
+        """Set muted."""
+        button = BedJetButton.MUTE if muted else BedJetButton.UNMUTE
+        command = bytearray((BedJetCommand.BUTTON, button))
+        await self._send_command(command)
+        self._beeps_muted = muted
+        self._fire_callbacks(True)
+
     async def set_operating_mode(self, operating_mode: OperatingMode) -> None:
         """Set operating mode."""
         command = bytearray(
