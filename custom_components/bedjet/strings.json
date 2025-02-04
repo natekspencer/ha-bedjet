@@ -31,8 +31,35 @@
       "ambient_temperature": {
         "name": "Ambient temperature"
       },
+      "bio_sequence_step": {
+        "name": "Bio sequence step"
+      },
+      "notification": {
+        "name": "Notification",
+        "state": {
+          "none": "None",
+          "clean_filter": "Please check BedJet air filter and clean if necessary",
+          "update_available": "A newer version of firmware is available",
+          "update_failed": "Unable to connect to the firmware update server",
+          "bio_fail_clock_not_set": "The specified sequence cannot be run because the clock is not set",
+          "bio_fail_too_long": "The specified sequence cannot be run because it contains steps that would be too long running from the current time"
+        }
+      },
       "runtime_remaining": {
         "name": "Runtime remaining"
+      },
+      "shutdown_reason": {
+        "name": "Shutdown reason"
+      },
+      "turbo_time": {
+        "name": "Turbo time"
+      },
+      "update_phase": {
+        "name": "Update phase",
+        "state": {
+          "24": "Connection test has completed OK",
+          "26": "Firmware update is not needed"
+        }
       }
     }
   }

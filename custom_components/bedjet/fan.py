@@ -49,7 +49,7 @@ class BedJetFanEntity(BedJetEntity, FanEntity):
     def _async_update_attrs(self) -> None:
         """Handle updating _attr values."""
         device = self._device
-        state = device._state
+        state = device.state
         is_on = state.operating_mode != OperatingMode.STANDBY
         self._attr_is_on = is_on
         self._attr_percentage = state.fan_speed if is_on else 0
@@ -71,7 +71,7 @@ class BedJetFanEntity(BedJetEntity, FanEntity):
         **kwargs: Any,
     ) -> None:
         """Turn on the fan."""
-        if self._device._state.operating_mode == OperatingMode.STANDBY:
+        if self._device.state.operating_mode == OperatingMode.STANDBY:
             await self._device.set_operating_mode(OperatingMode.COOL)
         if percentage:
             await self._device.set_fan_speed(percentage)
