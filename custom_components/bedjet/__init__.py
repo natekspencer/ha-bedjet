@@ -21,11 +21,13 @@ from .const import DEVICE_TIMEOUT, UPDATE_SECONDS
 from .pybedjet import BedJet
 
 PLATFORMS: list[Platform] = [
+    Platform.BINARY_SENSOR,
     Platform.BUTTON,
     Platform.CLIMATE,
     Platform.FAN,
     Platform.NUMBER,
     Platform.SENSOR,
+    Platform.SWITCH,
 ]
 
 _LOGGER = logging.getLogger(__name__)

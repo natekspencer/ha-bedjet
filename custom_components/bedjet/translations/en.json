@@ -17,6 +17,14 @@
     }
   },
   "entity": {
+    "binary_sensor": {
+      "dual_zone": {
+        "name": "Dual zone"
+      },
+      "units_setup": {
+        "name": "Units setup"
+      }
+    },
     "button": {
       "sync_clock": {
         "name": "Sync clock"
@@ -60,6 +68,14 @@
           "24": "Connection test has completed OK",
           "26": "Firmware update is not needed"
         }
+      }
+    },
+    "switch": {
+      "enable_led": {
+        "name": "Enable LED"
+      },
+      "mute_beeps": {
+        "name": "Mute beeps"
       }
     }
   }

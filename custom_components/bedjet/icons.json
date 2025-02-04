@@ -1,0 +1,26 @@
+{
+  "entity": {
+    "binary_sensor": {
+      "dual_zone": {
+        "default": "mdi:bed-single",
+        "state": {
+          "on": "mdi:bed-double"
+        }
+      }
+    },
+    "switch": {
+      "enable_led": {
+        "default": "mdi:led-off",
+        "state": {
+          "on": "mdi:led-on"
+        }
+      },
+      "mute_beeps": {
+        "default": "mdi:volume-high",
+        "state": {
+          "on": "mdi:volume-off"
+        }
+      }
+    }
+  }
+}
