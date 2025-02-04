@@ -105,7 +105,7 @@ class BedJetClimateEntity(BedJetEntity, ClimateEntity):
     def _async_update_attrs(self) -> None:
         """Handle updating _attr values."""
         device = self._device
-        state = device._state
+        state = device.state
         self._attr_current_temperature = state.current_temperature
         self._attr_fan_mode = f"{state.fan_speed}%"
         self._attr_hvac_mode = OPERATING_MODE_MAP[state.operating_mode]

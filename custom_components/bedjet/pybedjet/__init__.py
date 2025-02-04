@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
+import logging
 from math import ceil
 
+from bleak import BleakGATTCharacteristic
 from bleak.backends.device import BLEDevice
 from bleak.backends.scanner import AdvertisementData
 from bleak_retry_connector import (
@@ -38,7 +39,7 @@ BEDJET_BIODATA_FULL_UUID = "00002006-bed0-0080-aa55-4265644a6574"
 CLIENT_CHARACTERISTIC_CONFIG = "00002902-0000-1000-8000-00805f9b34fb"
 
 
-DISCONNECT_DELAY = 120
+DISCONNECT_DELAY = 60
 
 OPERATING_MODE_BUTTON_MAP = {
     OperatingMode.STANDBY: BedJetButton.OFF,
@@ -59,6 +60,7 @@ class BedJetState:
     operating_mode: OperatingMode = OperatingMode.STANDBY
     runtime_remaining: timedelta = timedelta()
     maximum_runtime: timedelta = timedelta()
+    turbo_time: timedelta = timedelta()
     fan_speed: int = 0
 
     minimum_temperature: float = 0
@@ -69,13 +71,24 @@ class BedJetState:
 class BedJet:
     """BedJet class."""
 
-    _device_status_data: bytearray | None = None
     _firmware_version: str | None = None
     _biorhythm_names: list[str] | None = None
     _memory_names: list[str] | None = None
     _m1_name: str | None = None
     _m2_name: str | None = None
     _m3_name: str | None = None
+    _shutdown_reason: int | None = None
+
+    # status fields
+    _device_status_data: bytearray | None = None
+    _beeps_muted: bool | None = None
+    _bio_sequence_step: int | None = None
+    _connection_test_passed: bool | None = None
+    _dual_zone: bool | None = None
+    _led_enabled: bool | None = None
+    _notification: BedJetNotification | None = None
+    _units_setup: bool | None = None
+    _update_phase: int | None = None
 
     def __init__(
         self, ble_device: BLEDevice, advertisement_data: AdvertisementData | None = None
@@ -107,6 +120,11 @@ class BedJet:
         return self._ble_device.address
 
     @property
+    def beeps_muted(self) -> bool | None:
+        """Return `True` if beeps are muted."""
+        return self._beeps_muted
+
+    @property
     def biorhythm1_name(self) -> str | None:
         """Return the biorhythm 1 name."""
         if self._biorhythm_names and (name := self._biorhythm_names[0]):
@@ -128,9 +146,29 @@ class BedJet:
         return None
 
     @property
+    def bio_sequence_step(self) -> int | None:
+        """Return the current bio sequence step."""
+        return self._bio_sequence_step
+
+    @property
+    def connection_test_passed(self) -> bool | None:
+        """Return if the connection test passed."""
+        return self._connection_test_passed
+
+    @property
+    def dual_zone(self) -> bool | None:
+        """Return `True` if part of a dual zone setup."""
+        return self._dual_zone
+
+    @property
     def firmware_version(self) -> str | None:
         """Return the firmware version."""
         return self._firmware_version
+
+    @property
+    def led_enabled(self) -> bool | None:
+        """Return if LED ring is enabled."""
+        return self._led_enabled
 
     @property
     def m1_name(self) -> str | None:
@@ -159,11 +197,36 @@ class BedJet:
         return self._name or self._ble_device.name or self._ble_device.address
 
     @property
+    def notification(self) -> BedJetNotification | None:
+        """Return the current notification."""
+        return self._notification
+
+    @property
     def rssi(self) -> int | None:
         """Get the rssi of the device."""
         if self._advertisement_data:
             return self._advertisement_data.rssi
         return None
+
+    @property
+    def shutdown_reason(self) -> int | None:
+        """Return the shutdown reason."""
+        return self._shutdown_reason
+
+    @property
+    def state(self) -> BedJetState:
+        """Return the current state."""
+        return self._state
+
+    @property
+    def units_setup(self) -> bool | None:
+        """Return `True` if units have been setup."""
+        return self._units_setup
+
+    @property
+    def update_phase(self) -> int | None:
+        """Return the update phase."""
+        return self._update_phase
 
     async def set_clock(self, hour: int, minute: int) -> None:
         """Set the clock."""
@@ -272,7 +335,9 @@ class BedJet:
             )
             await client.start_notify(BEDJET_STATUS_UUID, self._notification_handler)
 
-    def _notification_handler(self, _sender: int, data: bytearray) -> None:
+    def _notification_handler(
+        self, _sender: BleakGATTCharacteristic, data: bytearray
+    ) -> None:
         """Handle notification responses."""
         # _LOGGER.debug("%s: Notification received: %s", self.name, data.hex())
 
@@ -292,7 +357,7 @@ class BedJet:
         maximum_temperature = data[14] / 2  # Stored as Celsius * 2
         turbo_time = int.from_bytes(data[15 : 15 + 2], byteorder="big")
         ambient_temperature = data[17] / 2  # Stored as Celsius * 2
-        shutdown_reason = data[18]
+        self._shutdown_reason = data[18]
 
         runtime_remaining = timedelta(
             hours=hours_remaining, minutes=minutes_remaining, seconds=seconds_remaining
@@ -306,6 +371,7 @@ class BedJet:
             operating_mode,
             runtime_remaining,
             maximum_runtime,
+            timedelta(seconds=turbo_time),
             fan_speed,
             minimum_temperature,
             maximum_temperature,
@@ -328,7 +394,7 @@ class BedJet:
         tag = data[1:2].hex()
         message = "Unknown bio data"
 
-        def parse_text(data: bytearray, length: int = None, lead_bits: int = 0):
+        def parse_text(data: bytearray, length: int | None = None, lead_bits: int = 0):
             if lead_bits:
                 data = data[lead_bits:]
             if not length:
@@ -444,19 +510,28 @@ class BedJet:
                 self._device_status_data = data
                 # _ = data[0]  # unknown
                 # _ = data[1]  # unknown
-                _, _, _, _, _, _, is_dual_zone, _ = [
+                _, _, _, _, _, _, self._dual_zone, _ = [
                     bool(data[2] >> x & 1) for x in range(7, -1, -1)
                 ]
                 # _ = data[3]  # unknown
                 # _ = data[4]  # unknown
                 # _ = data[5]  # unknown
-                update_phase = data[6]
-                _, _, conn_test_passed, leds_enabled, _, units_setup, _, beeps_muted = [
-                    bool(data[7] >> x & 1) for x in range(7, -1, -1)
-                ]
-                bio_sequence_step = data[8]
-                notification = BedJetNotification(data[9])
+                self._update_phase = data[6]
+                (
+                    _,
+                    _,
+                    self._connection_test_passed,
+                    self._led_enabled,
+                    _,
+                    self._units_setup,
+                    _,
+                    self._beeps_muted,
+                ) = [bool(data[7] >> x & 1) for x in range(7, -1, -1)]
+                self._bio_sequence_step = data[8]
+                self._notification = BedJetNotification(data[9])
                 # _ = data[10]  # unknown
+
+                self._fire_callbacks()
 
     async def _read_device_firmware(self) -> None:
         """Read device firmware."""
@@ -528,10 +603,7 @@ class BedJet:
                 tag += 1
                 command = bytearray((BedJetCommand.GET_BIO, bio_type, tag))
                 # _LOGGER.debug("%s: Writing command value: %s", self.name, command.hex())
-                if data := await self._client.write_gatt_char(
-                    BEDJET_COMMAND_UUID, command, True
-                ):
-                    _LOGGER.debug("%s command response data: %s", self.name, data.hex())
+                await self._client.write_gatt_char(BEDJET_COMMAND_UUID, command, True)
 
                 data = await self._client.read_gatt_char(BEDJET_BIODATA_FULL_UUID)
                 self._parse_bio_data_response(data)

@@ -8,14 +8,19 @@ from enum import Enum, IntEnum
 class BedJetNotification(Enum):
     """BedJet notification."""
 
-    NONE = 0  # No notification pending
-    FILTER = 1  # Clean Filter / Please check BedJet air filter and clean if necessary
-    UPDATE = 2  # Firmware Update / A newer version of firmware is available
-    UPDATE_FAIL = 3  # Firmware Update / Unable to connect to the firmware update server
-    BIO_FAIL_CLOCK_NOT_SET = (
-        4  # The specified sequence cannot be run because the clock is not set
-    )
-    BIO_FAIL_TOO_LONG = 5  # The specified sequence cannot be run because it contains steps that would be too long running from the current time
+    NONE = 0
+    """No notification pending"""
+    CLEAN_FILTER = 1
+    """Clean Filter: please check BedJet air filter and clean if necessary"""
+    UPDATE_AVAILABLE = 2
+    """Firmware Update: a newer version of firmware is available"""
+    UPDATE_FAILED = 3
+    """Firmware Update: unable to connect to the firmware update server"""
+    BIO_FAIL_CLOCK_NOT_SET = 4
+    """The specified sequence cannot be run because the clock is not set"""
+    BIO_FAIL_TOO_LONG = 5
+    """The specified sequence cannot be run because it contains steps 
+    that would be too long running from the current time"""
 
 
 class OperatingMode(IntEnum):

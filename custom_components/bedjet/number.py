@@ -47,7 +47,7 @@ class BedJetNumberEntity(BedJetEntity, NumberEntity):
     def _async_update_attrs(self) -> None:
         """Handle updating _attr values."""
         device = self._device
-        state = device._state
+        state = device.state
         self._attr_native_max_value = state.maximum_runtime.total_seconds() / 60
         self._attr_native_value = ceil(state.runtime_remaining.total_seconds() / 60)
 
