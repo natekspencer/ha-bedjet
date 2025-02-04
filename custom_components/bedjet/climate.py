@@ -32,6 +32,10 @@ OPERATING_MODE_MAP = {
     OperatingMode.TURBO: HVACMode.HEAT,
     OperatingMode.WAIT: HVACMode.OFF,
 }
+OPERATING_MODE_PRESET_MAP = {
+    OperatingMode.EXTENDED_HEAT: "Extended Heat",
+    OperatingMode.TURBO: "Turbo",
+}
 
 HVAC_MODE_MAP = {
     # HVACMode.AUTO
@@ -111,7 +115,7 @@ class BedJetClimateEntity(BedJetEntity, ClimateEntity):
         self._attr_hvac_mode = OPERATING_MODE_MAP[state.operating_mode]
         self._attr_max_temp = state.maximum_temperature
         self._attr_min_temp = state.minimum_temperature
-        self._attr_preset_mode = None
+        self._attr_preset_mode = OPERATING_MODE_PRESET_MAP.get(state.operating_mode)
         self._attr_preset_modes = (
             list(PRESET_MODE_MAP.keys())
             + [

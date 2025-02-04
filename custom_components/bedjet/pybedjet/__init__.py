@@ -248,7 +248,7 @@ class BedJet:
         command = bytearray((BedJetCommand.BUTTON, button))
         await self._send_command(command)
         self._led_enabled = led
-        self._fire_callbacks(True)
+        self._fire_callbacks()
 
     async def set_muted(self, muted: bool) -> None:
         """Set muted."""
@@ -256,7 +256,7 @@ class BedJet:
         command = bytearray((BedJetCommand.BUTTON, button))
         await self._send_command(command)
         self._beeps_muted = muted
-        self._fire_callbacks(True)
+        self._fire_callbacks()
 
     async def set_operating_mode(self, operating_mode: OperatingMode) -> None:
         """Set operating mode."""
