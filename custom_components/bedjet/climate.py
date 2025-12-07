@@ -6,14 +6,18 @@ import logging
 from typing import Any
 
 from homeassistant.components.climate import (
+    ATTR_HVAC_MODE,
     ClimateEntity,
     ClimateEntityFeature,
     HVACMode,
 )
+from homeassistant.components.climate.const import DOMAIN as CLIMATE_DOMAIN
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.util.unit_conversion import TemperatureConverter
 
 from . import BedJetConfigEntry
 from .entity import BedJetEntity
@@ -103,6 +107,20 @@ class BedJetClimateEntity(BedJetEntity, ClimateEntity):
     ) -> None:
         """Initialize a BedJet climate entity."""
         self._attr_unique_id = device.address
+        self._max_temp_actual = 0.0
+        self._min_temp_actual = 0.0
+
+        self._bedjet_max_temp = (
+            TemperatureConverter.convert(  # maximum per bedjet 3 manual
+                109, UnitOfTemperature.FAHRENHEIT, self.temperature_unit
+            )
+        )
+        self._bedjet_min_temp = (
+            TemperatureConverter.convert(  # minimum per bedjet 3 manual
+                66, UnitOfTemperature.FAHRENHEIT, self.temperature_unit
+            )
+        )
+
         super().__init__(coordinator, device, name)
 
     @callback
@@ -113,8 +131,16 @@ class BedJetClimateEntity(BedJetEntity, ClimateEntity):
         self._attr_current_temperature = state.current_temperature
         self._attr_fan_mode = f"{state.fan_speed}%"
         self._attr_hvac_mode = OPERATING_MODE_MAP[state.operating_mode]
-        self._attr_max_temp = state.maximum_temperature
-        self._attr_min_temp = state.minimum_temperature
+        # Set min/max temp to the full range of bedjet temps to allow HA call to set_temperature to also set hvac state.
+        # Per-mode temp ranges validated manually below
+        self._max_temp_actual = state.maximum_temperature
+        self._min_temp_actual = state.minimum_temperature
+        self._attr_max_temp = max(
+            state.maximum_temperature, self._bedjet_max_temp, self.max_temp
+        )
+        self._attr_min_temp = min(
+            state.minimum_temperature, self._bedjet_min_temp, self.min_temp
+        )
         self._attr_preset_mode = OPERATING_MODE_PRESET_MAP.get(state.operating_mode)
         self._attr_preset_modes = (
             list(PRESET_MODE_MAP.keys())
@@ -165,4 +191,43 @@ class BedJetClimateEntity(BedJetEntity, ClimateEntity):
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
         """Set new target temperature."""
-        await self._device.set_temperature(kwargs.get(ATTR_TEMPERATURE))
+
+        if ATTR_HVAC_MODE in kwargs:
+            _LOGGER.debug(
+                f"Call to set temperature includes update to bedjet mode: {kwargs[ATTR_HVAC_MODE]}"
+            )
+            await self.async_set_hvac_mode(kwargs[ATTR_HVAC_MODE])
+            # Wait to pick up the new min/max temp
+            await self.async_update_ha_state(force_refresh=True)
+
+        # Changing the bedjet mode changes the valid temp range.
+        # HA evaluates min/max temp _before_ calling this method though...
+        # So, to process the command to change the mode + temperature at the same time,
+        # we set the HA-visible min/max temp to the full bedjet temp range (regardless of mode)
+        # and validate the temperature against the _actual_ ranges here, after setting the mode above
+        temp = kwargs.get(ATTR_TEMPERATURE)
+
+        _LOGGER.debug(
+            "Check valid temperature %d %s (%d %s) in actual bedjet range for mode %s: range %d %s - %d %s",
+            temp,
+            self.temperature_unit,
+            temp,
+            self.hass.config.units.temperature_unit,
+            str(self.hvac_mode),
+            self._min_temp_actual,
+            self.temperature_unit,
+            self._max_temp_actual,
+            self.temperature_unit,
+        )
+        if temp < self._min_temp_actual or temp > self._max_temp_actual:
+            raise ServiceValidationError(
+                translation_domain=CLIMATE_DOMAIN,
+                translation_key="temp_out_of_range",
+                translation_placeholders={
+                    "check_temp": str(temp),
+                    "min_temp": str(self._min_temp_actual),
+                    "max_temp": str(self._max_temp_actual),
+                },
+            )
+
+        await self._device.set_temperature(temp)
