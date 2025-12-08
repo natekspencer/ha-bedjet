@@ -6,6 +6,7 @@ import logging
 from typing import Any
 
 from homeassistant.components.climate import (
+    ATTR_HVAC_MODE,
     ClimateEntity,
     ClimateEntityFeature,
     HVACMode,
@@ -165,4 +166,9 @@ class BedJetClimateEntity(BedJetEntity, ClimateEntity):
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
         """Set new target temperature."""
+        if kwargs.get(ATTR_HVAC_MODE):
+            _LOGGER.warning(
+                "Changing HVAC mode while setting temperature is not supported. "
+                "Please call `climate.set_hvac_mode` first"
+            )
         await self._device.set_temperature(kwargs.get(ATTR_TEMPERATURE))
