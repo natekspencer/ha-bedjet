@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 import logging
 from math import ceil
 
@@ -264,6 +264,12 @@ class BedJet:
             (BedJetCommand.BUTTON, OPERATING_MODE_BUTTON_MAP[operating_mode])
         )
         await self._send_command(command)
+        try:
+            async with asyncio.timeout(1):
+                while self.state.operating_mode != operating_mode:
+                    await asyncio.sleep(0.1)
+        except TimeoutError:
+            _LOGGER.warning("Could not confirm if operating mode was set in 1 second")
 
     async def set_runtime_remaining(self, hours: int = 0, minutes: int = 0) -> None:
         """Set runtime remaining."""
