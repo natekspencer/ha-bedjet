@@ -14,6 +14,12 @@
 
 This project provides various entities to allow control of a [BedJet](https://bedjet.com) device.
 
+> ⚠️ **Important**
+>
+> BedJet devices only allow **one active Bluetooth connection at a time**. If the BedJet mobile app is open (or running in the background) and connected to the device, Home Assistant will not be able to connect to it. The BedJet remote is not affected by this limitation, as it uses RF rather than Bluetooth.
+>
+> Before proceeding, **make sure the BedJet app is fully closed**. If you need to use the app (for example, to adjust biorhythm programs), temporarily disable the Home Assistant integration.
+
 ## Installation (HACS) - Recommended
 
 0. Have [HACS](https://custom-components.github.io/hacs/installation/manual/) installed, this will allow you to easily update
