@@ -12,7 +12,7 @@
 
 # BedJet for Home Assistant
 
-This project provides various entities to allow control of a [BedJet](https://bedjet.com) device.
+This project provides various entities to allow control of a [BedJet 3](https://bedjet.com) device.
 
 > ⚠️ **Important**
 >
