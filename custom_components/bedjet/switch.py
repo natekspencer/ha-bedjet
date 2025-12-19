@@ -9,7 +9,7 @@ from typing import Any
 from homeassistant.components.switch import SwitchEntity, SwitchEntityDescription
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from . import BedJetConfigEntry
@@ -46,7 +46,7 @@ SWITCHES = (
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: BedJetConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the switch platform for BedJet."""
     data = entry.runtime_data
