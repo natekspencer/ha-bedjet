@@ -88,7 +88,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: BedJetConfigEntry) -> bo
         hass,
         _LOGGER,
         config_entry=entry,
-        name=bedjet.name,
+        name=f"{entry.title} ({entry.unique_id})",
         update_method=_async_update,
         update_interval=timedelta(seconds=UPDATE_SECONDS),
     )
@@ -105,7 +105,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: BedJetConfigEntry) -> bo
     except TimeoutError as ex:
         raise ConfigEntryNotReady(
             "Unable to communicate with the device; "
-            f"Try moving the Bluetooth adapter closer to {bedjet.name}"
+            f"Try moving the Bluetooth adapter closer to {bedjet.name_and_address}"
         ) from ex
     finally:
         cancel_first_update()
