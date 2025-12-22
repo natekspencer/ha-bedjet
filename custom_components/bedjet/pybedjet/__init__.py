@@ -113,6 +113,7 @@ class BedJet:
         """Set the ble device."""
         self._ble_device = ble_device
         self._advertisement_data = advertisement_data
+        _LOGGER.debug("%s: RSSI=%s", self.name_and_address, self.rssi)
 
     @property
     def address(self) -> str:
@@ -197,6 +198,11 @@ class BedJet:
         return self._name or self._ble_device.name or self._ble_device.address
 
     @property
+    def name_and_address(self) -> str:
+        """Get the name and address of the device."""
+        return f"{self.name} ({self.address})"
+
+    @property
     def notification(self) -> BedJetNotification | None:
         """Return the current notification."""
         return self._notification
@@ -269,7 +275,10 @@ class BedJet:
                 while self.state.operating_mode != operating_mode:
                     await asyncio.sleep(0.1)
         except TimeoutError:
-            _LOGGER.warning("Could not confirm if operating mode was set in 1 second")
+            _LOGGER.warning(
+                "%s: Could not confirm if operating mode was set in 1 second",
+                self.name_and_address,
+            )
 
     async def set_runtime_remaining(self, hours: int = 0, minutes: int = 0) -> None:
         """Set runtime remaining."""
@@ -286,19 +295,17 @@ class BedJet:
 
     async def update(self) -> None:
         """Update the BedJet."""
-        _LOGGER.debug("%s: Updating", self.name)
+        _LOGGER.debug("%s: Updating", self.name_and_address)
         await self._ensure_connected()
-        # await self._read_device_firmware()
         await self._read_memory_names()
         await self._read_biorhythm_names()
         await self._read_device_status()
-        # await self._run_test_commands()
         while self._state.current_temperature == 0:
             await asyncio.sleep(0.1)
 
     async def disconnect(self) -> None:
         """Disconnect from the BedJet."""
-        _LOGGER.debug("%s: Disconnect", self.name)
+        _LOGGER.debug("%s: Disconnect", self.name_and_address)
         await self._execute_disconnect()
 
     def _fire_callbacks(self) -> None:
@@ -321,9 +328,8 @@ class BedJet:
         """Ensure connection to device is established."""
         if self._connect_lock.locked():
             _LOGGER.debug(
-                "%s: Connection already in progress, waiting for it to complete; RSSI: %s",
-                self.name,
-                self.rssi,
+                "%s: Connection already in progress, waiting for it to complete",
+                self.name_and_address,
             )
         if self._client and self._client.is_connected:
             self._reset_disconnect_timer()
@@ -333,7 +339,7 @@ class BedJet:
             if self._client and self._client.is_connected:
                 self._reset_disconnect_timer()
                 return
-            _LOGGER.debug("%s: Connecting; RSSI: %s", self.name, self.rssi)
+            _LOGGER.debug("%s: Connecting", self.name_and_address)
             client = await establish_connection(
                 BleakClientWithServiceCache,
                 self._ble_device,
@@ -342,7 +348,7 @@ class BedJet:
                 use_services_cache=True,
                 ble_device_callback=lambda: self._ble_device,
             )
-            _LOGGER.debug("%s: Connected; RSSI: %s", self.name, self.rssi)
+            _LOGGER.debug("%s: Connected", self.name_and_address)
 
             self._client = client
             self._reset_disconnect_timer()
@@ -352,19 +358,32 @@ class BedJet:
             if not self._firmware_version:
                 await self._read_device_firmware()
 
-            _LOGGER.debug(
-                "%s: Subscribe to notifications; RSSI: %s", self.name, self.rssi
+            _LOGGER.debug("%s: Subscribe to notifications", self.name_and_address)
+            await client.start_notify(
+                BEDJET_STATUS_UUID,
+                self._notification_handler,
+                cb={"notification_discriminator": self._notification_check_handler},
             )
-            await client.start_notify(BEDJET_STATUS_UUID, self._notification_handler)
+
+    def _notification_check_handler(self, data: bytes) -> bool:
+        """Verify notification data matches expected length."""
+        return len(data) == 20
 
     def _notification_handler(
         self, _sender: BleakGATTCharacteristic, data: bytearray
     ) -> None:
         """Handle notification responses."""
-        # _LOGGER.debug("%s: Notification received: %s", self.name, data.hex())
+        _LOGGER.debug(
+            "%s: Notification received: %s", self.name_and_address, data.hex()
+        )
 
-        if len(data) < 20:
-            return  # oops
+        if len(data) != 20:
+            _LOGGER.debug(
+                "%s: Unexpected notification received: %s",
+                self.name_and_address,
+                data.hex(),
+            )
+            return
 
         hours_remaining = data[4]
         minutes_remaining = data[5]
@@ -400,14 +419,6 @@ class BedJet:
             ambient_temperature,
         )
 
-        # _LOGGER.debug(
-        #     "%s: Notification received; RSSI: %s; %s %s",
-        #     self.name,
-        #     self.rssi,
-        #     data.hex(),
-        #     self._state,
-        # )
-
         self._fire_callbacks()
 
     def _parse_bio_data_response(self, data: bytearray) -> None:
@@ -431,7 +442,6 @@ class BedJet:
 
         if bio_type == "00":
             message = "Device name"
-            # self._name = data[2:].split(b"\x00", 1)[0].decode()
             self._name = parse_text(data, lead_bits=2)
         elif bio_type == "01":
             message = "Memory names"
@@ -445,10 +455,13 @@ class BedJet:
             self._firmware_version = firmwares[0]
 
         _LOGGER.debug(
-            "%s: %s (%s) received: %s (%s)", self.name, message, tag, data.hex(), data
+            "%s: %s (%s) received: %s (%s)",
+            self.name_and_address,
+            message,
+            tag,
+            data.hex(),
+            data,
         )
-
-        # self._fire_callbacks()
 
     def _reset_disconnect_timer(self) -> None:
         """Reset disconnect timer."""
@@ -462,15 +475,9 @@ class BedJet:
     def _disconnected(self, client: BleakClientWithServiceCache) -> None:
         """Disconnected callback."""
         if self._expected_disconnect:
-            _LOGGER.debug(
-                "%s: Disconnected from device; RSSI: %s", self.name, self.rssi
-            )
+            _LOGGER.debug("%s: Disconnected from device", self.name_and_address)
             return
-        _LOGGER.warning(
-            "%s: Device unexpectedly disconnected; RSSI: %s",
-            self.name,
-            self.rssi,
-        )
+        _LOGGER.warning("%s: Device unexpectedly disconnected", self.name_and_address)
 
     def _auto_disconnect(self) -> None:
         """Disconnect from device automatically."""
@@ -481,7 +488,7 @@ class BedJet:
         """Execute timed disconnection."""
         _LOGGER.debug(
             "%s: Disconnecting after timeout of %s",
-            self.name,
+            self.name_and_address,
             DISCONNECT_DELAY,
         )
         await self._execute_disconnect()
@@ -499,33 +506,43 @@ class BedJet:
                     await client.stop_notify(BEDJET_STATUS_UUID)
                 except BleakError:
                     _LOGGER.debug(
-                        "%s: Failed to stop notifications", self.name, exc_info=True
+                        "%s: Failed to stop notifications",
+                        self.name_and_address,
+                        exc_info=True,
                     )
                 await client.disconnect()
 
     async def _read_device_name(self) -> None:
         """Read device name."""
         if self._client and self._client.is_connected:
-            _LOGGER.debug("%s: Read device name; RSSI: %s", self.name, self.rssi)
+            _LOGGER.debug("%s: Read device name", self.name_and_address)
             data = await self._client.read_gatt_char(BEDJET_NAME_UUID)
-            if (name := data.decode()) != (old_name := self.name):
-                _LOGGER.debug("%s: Actual device name is %s", old_name, name)
+            if (name := data.decode()) != self.name:
+                _LOGGER.debug(
+                    "%s: Actual device name is %s", self.name_and_address, name
+                )
                 self._name = name
 
     async def _read_device_status(self) -> None:
         """Read device status."""
         if self._client and self._client.is_connected:
-            _LOGGER.debug("%s: Read device status; RSSI: %s", self.name, self.rssi)
+            _LOGGER.debug("%s: Read device status", self.name_and_address)
             data = await self._client.read_gatt_char(BEDJET_STATUS_UUID)
-            if len(data) == 20:
-                # self._notification_handler(0, data)
-                # return await self._read_device_status()
+            if len(data) != 11:
+                _LOGGER.debug(
+                    "%s: Unexpected device status received: %s",
+                    self.name_and_address,
+                    data.hex(),
+                )
                 return
 
+            _LOGGER.debug(
+                "%s: Received device status: %s", self.name_and_address, data.hex()
+            )
             if (old_data := self._device_status_data) != data:
                 _LOGGER.debug(
-                    "%s device status updated: %s -> %s",
-                    self.name,
+                    "%s: Device status updated: %s -> %s",
+                    self.name_and_address,
                     old_data.hex() if old_data else None,
                     data.hex(),
                 )
@@ -560,7 +577,7 @@ class BedJet:
         tag = 0
         while not self._firmware_version and tag < 2:
             if self._client and self._client.is_connected:
-                _LOGGER.debug("%s: Read device firmware", self.name)
+                _LOGGER.debug("%s: Read device firmware", self.name_and_address)
                 command = bytearray(
                     (BedJetCommand.GET_BIO, BioDataRequest.FIRMWARE_VERSIONS, tag)
                 )
@@ -569,14 +586,14 @@ class BedJet:
                 self._parse_bio_data_response(data)
                 tag += 1
         if not self._firmware_version:
-            _LOGGER.debug("%s: Failed to read firmware", self.name)
+            _LOGGER.debug("%s: Failed to read firmware", self.name_and_address)
 
     async def _read_biorhythm_names(self) -> None:
         """Read biorhythm preset names."""
         tag = 0
         while not self._biorhythm_names and tag < 2:
             if self._client and self._client.is_connected:
-                _LOGGER.debug("%s: Read biorhythm names", self.name)
+                _LOGGER.debug("%s: Read biorhythm names", self.name_and_address)
                 command = bytearray(
                     (BedJetCommand.GET_BIO, BioDataRequest.BIORHYTHM_NAMES, tag)
                 )
@@ -585,14 +602,14 @@ class BedJet:
                 self._parse_bio_data_response(data)
                 tag += 1
         if not self._biorhythm_names:
-            _LOGGER.debug("%s: Failed to read biorhythm names", self.name)
+            _LOGGER.debug("%s: Failed to read biorhythm names", self.name_and_address)
 
     async def _read_memory_names(self) -> None:
         """Read memory preset names."""
         tag = 0
         while not self._memory_names and tag < 2:
             if self._client and self._client.is_connected:
-                _LOGGER.debug("%s: Read memory names", self.name)
+                _LOGGER.debug("%s: Read memory names", self.name_and_address)
                 command = bytearray(
                     (BedJetCommand.GET_BIO, BioDataRequest.MEMORY_NAMES, tag)
                 )
@@ -601,20 +618,19 @@ class BedJet:
                 self._parse_bio_data_response(data)
                 tag += 1
         if not self._memory_names:
-            _LOGGER.debug("%s: Failed to read memory names", self.name)
+            _LOGGER.debug("%s: Failed to read memory names", self.name_and_address)
 
     async def _send_command(self, command: bytearray) -> None:
         """Send a command to the BedJet."""
         if self._client and self._client.is_connected:
-            _LOGGER.debug("%s: Sending command: %s", self.name, command.hex())
+            _LOGGER.debug(
+                "%s: Sending command: %s", self.name_and_address, command.hex()
+            )
             await self._client.write_gatt_char(BEDJET_COMMAND_UUID, command)
 
     async def _run_test_commands(self) -> None:
         """Run test commands."""
         if self._client and self._client.is_connected:
-            # data = await self._client.read_gatt_char(BEDJET_BIODATA_FULL_UUID)
-            # _LOGGER.debug("Other: %s; %s", data.hex(), data)
-
             tag = 0
             for bio_type in (
                 BioDataRequest.BIORHYTHM_NAMES,
@@ -624,13 +640,18 @@ class BedJet:
             ):
                 tag += 1
                 command = bytearray((BedJetCommand.GET_BIO, bio_type, tag))
-                # _LOGGER.debug("%s: Writing command value: %s", self.name, command.hex())
+                _LOGGER.debug(
+                    "%s: Writing command value: %s",
+                    self.name_and_address,
+                    command.hex(),
+                )
                 await self._client.write_gatt_char(BEDJET_COMMAND_UUID, command, True)
 
                 data = await self._client.read_gatt_char(BEDJET_BIODATA_FULL_UUID)
                 self._parse_bio_data_response(data)
                 _LOGGER.debug(
-                    "%s/%s, %s/%s, %s, %s",
+                    "%s: %s/%s, %s/%s, %s, %s",
+                    self.name_and_address,
                     bio_type,
                     data[0],
                     tag,
