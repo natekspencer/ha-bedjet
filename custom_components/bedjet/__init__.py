@@ -80,7 +80,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: BedJetConfigEntry) -> bo
         try:
             await bedjet.update()
         except BLEAK_EXCEPTIONS as ex:
-            raise UpdateFailed(str(ex)) from ex
+            if bedjet.is_data_stale:
+                raise UpdateFailed(str(ex)) from ex
 
     startup_event = asyncio.Event()
     cancel_first_update = bedjet.register_callback(lambda *_: startup_event.set())

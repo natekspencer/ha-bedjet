@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 import logging
 from math import ceil
 
@@ -38,7 +38,6 @@ BEDJET_BIODATA_UUID = "00002005-bed0-0080-aa55-4265644a6574"
 BEDJET_BIODATA_FULL_UUID = "00002006-bed0-0080-aa55-4265644a6574"
 CLIENT_CHARACTERISTIC_CONFIG = "00002902-0000-1000-8000-00805f9b34fb"
 
-
 DISCONNECT_DELAY = 60
 
 OPERATING_MODE_BUTTON_MAP = {
@@ -49,6 +48,8 @@ OPERATING_MODE_BUTTON_MAP = {
     OperatingMode.COOL: BedJetButton.COOL,
     OperatingMode.DRY: BedJetButton.DRY,
 }
+
+STALE_AFTER_SECONDS = 60
 
 
 @dataclass(frozen=True)
@@ -89,6 +90,9 @@ class BedJet:
     _notification: BedJetNotification | None = None
     _units_setup: bool | None = None
     _update_phase: int | None = None
+
+    # stale check
+    _last_update: datetime | None = None
 
     def __init__(
         self, ble_device: BLEDevice, advertisement_data: AdvertisementData | None = None
@@ -165,6 +169,15 @@ class BedJet:
     def firmware_version(self) -> str | None:
         """Return the firmware version."""
         return self._firmware_version
+
+    @property
+    def is_data_stale(self) -> bool:
+        """Return `True` if the data should be considered stale based on last update."""
+        return (
+            self._last_update is None
+            or (datetime.now(UTC) - self._last_update).total_seconds()
+            > STALE_AFTER_SECONDS
+        )
 
     @property
     def led_enabled(self) -> bool | None:
@@ -297,9 +310,9 @@ class BedJet:
         """Update the BedJet."""
         _LOGGER.debug("%s: Updating", self.name_and_address)
         await self._ensure_connected()
+        await self._read_device_status()
         await self._read_memory_names()
         await self._read_biorhythm_names()
-        await self._read_device_status()
         while self._state.current_temperature == 0:
             await asyncio.sleep(0.1)
 
@@ -353,17 +366,19 @@ class BedJet:
             self._client = client
             self._reset_disconnect_timer()
 
-            if not self._name:
-                await self._read_device_name()
-            if not self._firmware_version:
-                await self._read_device_firmware()
-
             _LOGGER.debug("%s: Subscribe to notifications", self.name_and_address)
             await client.start_notify(
                 BEDJET_STATUS_UUID,
                 self._notification_handler,
                 cb={"notification_discriminator": self._notification_check_handler},
             )
+
+            if self._device_status_data is None:
+                await self._read_device_status()
+            if not self._name:
+                await self._read_device_name()
+            if not self._firmware_version:
+                await self._read_device_firmware()
 
     def _notification_check_handler(self, data: bytes) -> bool:
         """Verify notification data matches expected length."""
@@ -376,6 +391,7 @@ class BedJet:
         _LOGGER.debug(
             "%s: Notification received: %s", self.name_and_address, data.hex()
         )
+        self._last_update = datetime.now(UTC)
 
         if len(data) != 20:
             _LOGGER.debug(
@@ -528,6 +544,8 @@ class BedJet:
         if self._client and self._client.is_connected:
             _LOGGER.debug("%s: Read device status", self.name_and_address)
             data = await self._client.read_gatt_char(BEDJET_STATUS_UUID)
+            self._last_update = datetime.now(UTC)
+
             if len(data) != 11:
                 _LOGGER.debug(
                     "%s: Unexpected device status received: %s",
