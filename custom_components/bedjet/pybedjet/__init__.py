@@ -51,6 +51,67 @@ OPERATING_MODE_BUTTON_MAP = {
 
 STALE_AFTER_SECONDS = 60
 
+DEFAULT_TEMPERATURE_DELTA = 1.0
+DEFAULT_TEMPERATURE_TIME = timedelta(seconds=15)
+
+
+@dataclass
+class TemperatureLimiter:
+    """Limit how often a temperature value is allowed to change.
+
+    This class suppresses small, rapid fluctuations ("jitter") from fast-reporting
+    temperature sensors. A new temperature is accepted only if at least one of the
+    following conditions is met:
+
+    - The temperature changed by at least ``min_delta`` degrees.
+    - At least ``min_age`` has passed since the last accepted update.
+
+    If the incoming temperature is exactly the same as the current value, the
+    internal timer is reset to prevent a forced update due only to elapsed time.
+    """
+
+    min_delta: float = DEFAULT_TEMPERATURE_DELTA
+    min_time: timedelta = DEFAULT_TEMPERATURE_TIME
+
+    temperature: float | None = None
+    last_updated: datetime | None = None
+
+    def update(self, temperature: float, now: datetime | None = None) -> float:
+        """Process a new temperature reading and return the value to report.
+
+        Args:
+            temperature: The newly received temperature reading.
+            now: Optional timestamp for the reading. If not provided, the current
+                 UTC time will be used. Supplying this is useful for testing or when
+                 multiple values should share the same timestamp.
+
+        Returns:
+            The temperature value that should be reported after applying the
+            limiter rules. This will be either the new temperature (if accepted)
+            or the previously accepted value (if suppressed).
+        """
+        if now is None:
+            now = datetime.now(UTC)
+
+        def _accept() -> float:
+            self.temperature = temperature
+            self.last_updated = now
+            return temperature
+
+        if self.last_updated is None or self.temperature is None:
+            return _accept()
+
+        if self.temperature == temperature:
+            return _accept()  # reset timer to further reduce jitter
+
+        if (
+            abs(temperature - self.temperature) >= self.min_delta
+            or (now - self.last_updated) >= self.min_time
+        ):
+            return _accept()
+
+        return self.temperature
+
 
 @dataclass(frozen=True)
 class BedJetState:
@@ -90,6 +151,10 @@ class BedJet:
     _notification: BedJetNotification | None = None
     _units_setup: bool | None = None
     _update_phase: int | None = None
+
+    # temperature limiters
+    _current_temperature_limiter = TemperatureLimiter()
+    _ambient_temperature_limiter = TemperatureLimiter()
 
     # stale check
     _last_update: datetime | None = None
@@ -387,11 +452,14 @@ class BedJet:
     def _notification_handler(
         self, _sender: BleakGATTCharacteristic, data: bytearray
     ) -> None:
-        """Handle notification responses."""
+        """Handle notification responses.
+
+        Temperatures are reported in degrees Celsius * 2.
+        """
         _LOGGER.debug(
             "%s: Notification received: %s", self.name_and_address, data.hex()
         )
-        self._last_update = datetime.now(UTC)
+        self._last_update = _now = datetime.now(UTC)
 
         if len(data) != 20:
             _LOGGER.debug(
@@ -404,16 +472,20 @@ class BedJet:
         hours_remaining = data[4]
         minutes_remaining = data[5]
         seconds_remaining = data[6]
-        current_temperature = data[7] / 2  # Stored as Celsius * 2
-        target_temperature = data[8] / 2  # Stored as Celsius * 2
+        current_temperature = self._current_temperature_limiter.update(
+            data[7] / 2, _now
+        )
+        target_temperature = data[8] / 2
         operating_mode = OperatingMode(data[9])
         fan_step = data[10]
         maximum_hours = data[11]
         maximum_minutes = data[12]
-        minimum_temperature = data[13] / 2  # Stored as Celsius * 2
-        maximum_temperature = data[14] / 2  # Stored as Celsius * 2
+        minimum_temperature = data[13] / 2
+        maximum_temperature = data[14] / 2
         turbo_time = int.from_bytes(data[15 : 15 + 2], byteorder="big")
-        ambient_temperature = data[17] / 2  # Stored as Celsius * 2
+        ambient_temperature = self._ambient_temperature_limiter.update(
+            data[17] / 2, _now
+        )
         self._shutdown_reason = data[18]
 
         runtime_remaining = timedelta(
