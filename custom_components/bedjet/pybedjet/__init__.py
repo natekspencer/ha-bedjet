@@ -64,7 +64,7 @@ class TemperatureLimiter:
     following conditions is met:
 
     - The temperature changed by at least ``min_delta`` degrees.
-    - At least ``min_age`` has passed since the last accepted update.
+    - At least ``min_time`` has passed since the last accepted update.
 
     If the incoming temperature is exactly the same as the current value, the
     internal timer is reset to prevent a forced update due only to elapsed time.
