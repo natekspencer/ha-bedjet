@@ -152,10 +152,6 @@ class BedJet:
     _units_setup: bool | None = None
     _update_phase: int | None = None
 
-    # temperature limiters
-    _current_temperature_limiter = TemperatureLimiter()
-    _ambient_temperature_limiter = TemperatureLimiter()
-
     # stale check
     _last_update: datetime | None = None
 
@@ -175,6 +171,10 @@ class BedJet:
         self._callbacks: list[Callable[[BedJetState], None]] = []
         self._resolve_protocol_event = asyncio.Event()
         self._name: str | None = None
+
+        # temperature limiters
+        self._current_temperature_limiter = TemperatureLimiter()
+        self._ambient_temperature_limiter = TemperatureLimiter()
 
     def set_ble_device_and_advertisement_data(
         self, ble_device: BLEDevice, advertisement_data: AdvertisementData
