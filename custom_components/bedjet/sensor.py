@@ -71,14 +71,6 @@ SENSORS = (
         value_fn=lambda device: device.state.runtime_endtime,
     ),
     BedJetSensorEntityDescription(
-        key="runtime_remaining",
-        device_class=SensorDeviceClass.DURATION,
-        native_unit_of_measurement=UnitOfTime.SECONDS,
-        suggested_unit_of_measurement=UnitOfTime.MINUTES,
-        translation_key="runtime_remaining",
-        value_fn=lambda device: device.state.runtime_remaining.total_seconds(),
-    ),
-    BedJetSensorEntityDescription(
         key="shutdown_reason",
         entity_category=EntityCategory.DIAGNOSTIC,
         entity_registry_enabled_default=False,
