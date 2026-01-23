@@ -25,7 +25,7 @@ from .const import (
     BioDataRequest,
     OperatingMode,
 )
-from .limiter import RuntimeEndtimeLimiter, TemperatureLimiter
+from .limiter import EndTimeLimiter, TemperatureLimiter
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -61,7 +61,7 @@ class BedJetState:
     target_temperature: float = 0
     operating_mode: OperatingMode = OperatingMode.STANDBY
     runtime_remaining: timedelta = timedelta()
-    runtime_endtime: datetime | None = None
+    run_end_time: datetime | None = None
     maximum_runtime: timedelta = timedelta()
     turbo_time: timedelta = timedelta()
     fan_speed: int = 0
@@ -116,7 +116,7 @@ class BedJet:
         # limiters
         self._current_temperature_limiter = TemperatureLimiter()
         self._ambient_temperature_limiter = TemperatureLimiter()
-        self._runtime_endtime_limiter = RuntimeEndtimeLimiter()
+        self._run_end_time_limiter = EndTimeLimiter()
 
     def set_ble_device_and_advertisement_data(
         self, ble_device: BLEDevice, advertisement_data: AdvertisementData
@@ -433,7 +433,7 @@ class BedJet:
         runtime_remaining = timedelta(
             hours=hours_remaining, minutes=minutes_remaining, seconds=seconds_remaining
         )
-        runtime_endtime = self._runtime_endtime_limiter.update(runtime_remaining, _now)
+        run_end_time = self._run_end_time_limiter.update(runtime_remaining, _now)
         maximum_runtime = timedelta(hours=maximum_hours, minutes=maximum_minutes)
         fan_speed = (fan_step + 1) * 5
 
@@ -442,7 +442,7 @@ class BedJet:
             target_temperature,
             operating_mode,
             runtime_remaining,
-            runtime_endtime,
+            run_end_time,
             maximum_runtime,
             timedelta(seconds=turbo_time),
             fan_speed,
