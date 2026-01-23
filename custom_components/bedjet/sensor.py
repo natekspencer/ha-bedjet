@@ -67,10 +67,10 @@ SENSORS = (
         ),
     ),
     BedJetSensorEntityDescription(
-        key="runtime_endtime",
+        key="run_end_time",
         device_class=SensorDeviceClass.TIMESTAMP,
-        translation_key="runtime_endtime",
-        value_fn=lambda device: device.state.runtime_endtime,
+        translation_key="run_end_time",
+        value_fn=lambda device: device.state.run_end_time,
     ),
     BedJetSensorEntityDescription(
         key="shutdown_reason",

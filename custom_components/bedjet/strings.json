@@ -53,8 +53,8 @@
           "bio_fail_too_long": "The specified sequence cannot be run because it contains steps that would be too long running from the current time"
         }
       },
-      "runtime_endtime": {
-        "name": "Runtime end time"
+      "run_end_time": {
+        "name": "Run end time"
       },
       "shutdown_reason": {
         "name": "Shutdown reason"

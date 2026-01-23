@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 
 DEFAULT_TEMPERATURE_DELTA = 1.0
 DEFAULT_TEMPERATURE_TIME = timedelta(seconds=15)
-DEFAULT_RUNTIME_ENDTIME_DELTA = 2  # seconds
+DEFAULT_DELTA_SECONDS = 2
 
 
 @dataclass
@@ -69,53 +69,53 @@ class TemperatureLimiter:
 
 
 @dataclass
-class RuntimeEndtimeLimiter:
-    """Stabilize a calculated runtime end time derived from remaining runtime.
+class EndTimeLimiter:
+    """Stabilize a calculated end time derived from remaining time.
 
-    This suppresses small fluctuations in remaining-runtime reports that would
+    This suppresses small fluctuations in remaining time reports that would
     otherwise cause the computed end time to jitter and trigger unnecessary
     Home Assistant state updates.
 
     Rules:
-    - If no runtime is remaining and the timer is not running, do not update.
-    - If this is the first meaningful runtime, set the end time.
-    - If a new run starts after expiration, set the end time.
-    - Otherwise, only update if the end time shifts by at least ``jitter`` seconds.
+    - If no time is remaining and the timer is not running, do not update.
+    - If this is the first meaningful time, set the end time.
+    - If a new timer starts after expiration, set the end time.
+    - Otherwise, only update if the end time shifts by at least ``min_delta_seconds`` seconds.
     """
 
-    jitter: float = DEFAULT_RUNTIME_ENDTIME_DELTA  # seconds
+    min_delta_seconds: float = DEFAULT_DELTA_SECONDS
 
-    _endtime: datetime | None = None
+    _end_time: datetime | None = None
 
     def update(
-        self, runtime_remaining: timedelta, now: datetime | None = None
+        self, time_remaining: timedelta, now: datetime | None = None
     ) -> datetime | None:
-        """Update and return the stabilized runtime end time.
+        """Update and return the stabilized end time.
 
         Args:
-            runtime_remaining: Remaining runtime reported by the device.
+            time_remaining: Remaining time reported by the device.
             now: Timestamp to use as the reference point. Defaults to current UTC.
 
         Returns:
-            The stabilized end time, or ``None`` if no active runtime is present.
+            The stabilized end time, or ``None`` if no active time is present.
         """
         if now is None:
             now = datetime.now(UTC)
 
-        old = self._endtime
-        remaining = runtime_remaining.total_seconds()
+        old = self._end_time
+        remaining = time_remaining.total_seconds()
 
         # Nothing running and nothing to update
         if remaining == 0 and (old is None or old <= now):
             return old
 
-        new = now + runtime_remaining
+        new = now + time_remaining
 
         if (
             old is None
             or (old <= now and remaining > 0)  # new run after expiration
-            or abs((new - old).total_seconds()) >= self.jitter
+            or abs((new - old).total_seconds()) >= self.min_delta_seconds
         ):
-            self._endtime = new
+            self._end_time = new
 
-        return self._endtime
+        return self._end_time
