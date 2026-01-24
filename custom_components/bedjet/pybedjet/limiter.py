@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 
 DEFAULT_TEMPERATURE_DELTA = 1.0
 DEFAULT_TEMPERATURE_TIME = timedelta(seconds=15)
-DEFAULT_DELTA_SECONDS = 2
+DEFAULT_DELTA_SECONDS = 5
 
 
 @dataclass
