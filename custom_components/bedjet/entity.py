@@ -26,14 +26,10 @@ class BedJetEntity(CoordinatorEntity[DataUpdateCoordinator[None]]):
         """Initialize a BedJet entity."""
         super().__init__(coordinator)
         self._device = device
-        
-        # Determine model name based on connection type
-        model_name = "BedJet V2" if device.is_v2 else "BedJet 3"
-
         self._attr_device_info = DeviceInfo(
             name=name,
             manufacturer="BedJet",
-            model=model_name,
+            model=device.model,
             sw_version=device.firmware_version,
             connections={(dr.CONNECTION_BLUETOOTH, device.address)},
         )
