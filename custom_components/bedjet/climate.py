@@ -49,6 +49,7 @@ HVAC_MODE_MAP = {
 }
 
 PRESET_MODE_MAP = {
+    "None": BedJetButton.HEAT,
     "Turbo": BedJetButton.TURBO,
     "Extended Heat": BedJetButton.EXTENDED_HEAT,
     # "M1": BedJetButton.M1,
@@ -133,9 +134,16 @@ class BedJetClimateEntity(BedJetEntity, ClimateEntity):
         if device.is_v2:
             if "Extended Heat" in base_presets:
                 base_presets.remove("Extended Heat")
-            # Turbo remains, but is handled specially in set_preset_mode
+        else:
+            if "None" in base_presets:
+                base_presets.remove("None")
 
         self._attr_preset_mode = OPERATING_MODE_PRESET_MAP.get(state.operating_mode)
+        
+        # "None" included to revert from Turbo to Heat mode
+        if device.is_v2 and self._attr_preset_mode is None:
+            self._attr_preset_mode = "None"
+
         self._attr_preset_modes = (
             base_presets
             + [
@@ -180,9 +188,15 @@ class BedJetClimateEntity(BedJetEntity, ClimateEntity):
             if preset_mode == "Extended Heat":
                 _LOGGER.warning("Extended Heat is not supported on BedJet V2")
                 return
+            
             if preset_mode == "Turbo":
-                # Route Turbo through the logic that knows about V2 packets
+																		   
                 await device.set_operating_mode(OperatingMode.TURBO)
+                return
+                
+            if preset_mode == "None":
+                if device.state.operating_mode == OperatingMode.TURBO:
+                    await device.set_operating_mode(OperatingMode.HEAT)
                 return
         # -----------------------------
 
@@ -201,6 +215,8 @@ class BedJetClimateEntity(BedJetEntity, ClimateEntity):
                 button = BedJetButton.BIORHYTHM_3
             else:
                 raise ValueError(f"{preset_mode} is not a valid preset for {self.name}")
+        
+																			   
         await self._device._send_command(bytearray((BedJetCommand.BUTTON, button)))
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
