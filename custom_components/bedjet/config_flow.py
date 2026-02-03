@@ -22,8 +22,9 @@ from .pybedjet import BedJet
 
 _LOGGER = logging.getLogger(__name__)
 
-LOCAL_NAMES = {"BEDJET_V3"}
-# NEW: Define V2 UUID so we can discover it
+# UPDATED: Included "BEDJET" to catch V2 units during manual discovery
+LOCAL_NAMES = {"BEDJET_V3", "BEDJET"}
+# NEW: Define V2 UUID so we can discover it via service scan
 BEDJET_V2_SERVICE_UUID = "49535343-fe7d-4ae5-8fa9-9fafd205e455"
 
 
