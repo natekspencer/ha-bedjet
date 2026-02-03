@@ -25,7 +25,9 @@ async def async_setup_entry(
 ) -> None:
     """Set up the number platform for BedJet."""
     data = entry.runtime_data
-    async_add_entities([BedJetNumberEntity(data.coordinator, data.device, entry.title)])
+    # Currently only for v3, until logic is figured out for v2. For now, users can use HA automations to stop early.
+    if not data.device.is_v2:
+        async_add_entities([BedJetNumberEntity(data.coordinator, data.device, entry.title)])
 
 
 class BedJetNumberEntity(BedJetEntity, NumberEntity):
