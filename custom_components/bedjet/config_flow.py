@@ -23,6 +23,8 @@ from .pybedjet import BedJet
 _LOGGER = logging.getLogger(__name__)
 
 LOCAL_NAMES = {"BEDJET_V3"}
+# NEW: Define V2 UUID so we can discover it
+BEDJET_V2_SERVICE_UUID = "49535343-fe7d-4ae5-8fa9-9fafd205e455"
 
 
 async def connect_bedjet(device: BLEDevice) -> tuple[bool, str]:
@@ -114,9 +116,10 @@ class BedjetDeviceConfigFlow(ConfigFlow, domain=DOMAIN):
                 if (
                     discovery.address in current_addresses
                     or discovery.address in self._discovered_devices
-                    or not any(
-                        discovery.name.startswith(local_name)
-                        for local_name in LOCAL_NAMES
+                    # MODIFIED: Logic extended to allow V2 UUIDs through
+                    or (
+                        not any(discovery.name.startswith(local_name) for local_name in LOCAL_NAMES)
+                        and BEDJET_V2_SERVICE_UUID not in discovery.service_uuids
                     )
                 ):
                     continue
