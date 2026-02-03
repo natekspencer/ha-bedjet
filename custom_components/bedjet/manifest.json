@@ -6,10 +6,15 @@
       "local_name": "BEDJET_V3",
       "service_uuid": "00001000-bed0-0080-aa55-4265644a6574",
       "connectable": true
+    },
+    {
+      "service_uuid": "49535343-fe7d-4ae5-8fa9-9fafd205e455",
+      "connectable": true
     }
   ],
   "codeowners": [
-    "@natekspencer"
+    "@natekspencer",
+    "@jdaleo23"
   ],
   "config_flow": true,
   "dependencies": [
@@ -25,5 +30,5 @@
     "bluetooth_adapters",
     "habluetooth"
   ],
-  "version": "0.0.0"
+  "version": "1.2.5"
 }
