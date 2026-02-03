@@ -8,6 +8,7 @@
       "connectable": true
     },
     {
+      "local_name": "BEDJET",
       "service_uuid": "49535343-fe7d-4ae5-8fa9-9fafd205e455",
       "connectable": true
     }
@@ -30,5 +31,5 @@
     "bluetooth_adapters",
     "habluetooth"
   ],
-  "version": "1.2.5"
+  "version": "0.0.0"
 }
