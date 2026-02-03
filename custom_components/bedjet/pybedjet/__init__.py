@@ -201,6 +201,11 @@ class BedJet:
     def is_v2(self) -> bool:
         """Return True if connected to a V2 device."""
         return self._is_v2
+    
+    @property
+    def model(self) -> str:
+        """Return the model name based on the device version."""
+        return "BedJet V2" if self.is_v2 else "BedJet 3"
 
     @property
     def beeps_muted(self) -> bool | None:
