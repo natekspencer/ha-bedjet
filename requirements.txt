@@ -11,4 +11,4 @@ bluetooth_adapters
 colorlog
 pip>=21.0
 pre-commit
-ruff>=0.14.10
+ruff>=0.15
