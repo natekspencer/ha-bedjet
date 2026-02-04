@@ -59,9 +59,11 @@ SENSORS = (
         ],
         translation_key="notification",
         value_fn=(
-            lambda device: notification.name.lower()
-            if (notification := device.notification)
-            else None
+            lambda device: (
+                notification.name.lower()
+                if (notification := device.notification)
+                else None
+            )
         ),
     ),
     BedJetSensorEntityDescription(
