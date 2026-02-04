@@ -196,12 +196,12 @@ class BedJet:
     def address(self) -> str:
         """Return the address."""
         return self._ble_device.address
-    
+
     @property
     def is_v2(self) -> bool:
         """Return True if connected to a V2 device."""
         return self._is_v2
-    
+
     @property
     def model(self) -> str:
         """Return the model name based on the device version."""
@@ -344,29 +344,28 @@ class BedJet:
         if self._is_v2:
             # V2 Protocol: SET_FAN (0x07)
             # Packet: 58 07 0E [MODE] [STEP] [TEMP] [HRS] [MIN] 00 [CHK]
-            
+
             # 1. Determine Mode ID from current state
             mode_id = 0x02 # Default Heat
             if self.state.operating_mode == OperatingMode.TURBO: mode_id = 0x01
             elif self.state.operating_mode == OperatingMode.HEAT: mode_id = 0x02
             elif self.state.operating_mode == OperatingMode.COOL: mode_id = 0x03
-            
+
             # 2. Calculate Fan Step
             step = int(fan_speed / 5)
-            
+
             # 3. Handle Timer Preservation
             total_seconds = int(self.state.runtime_remaining.total_seconds())
             hours = total_seconds // 3600
             minutes = (total_seconds % 3600) // 60
-            
+
             # 4. Handle Temperature and Mute Flag
-            target_f = (self.state.target_temperature * 9/5) + 32
-            temp_byte = int(round((target_f - 32) / 0.9))
-            
+            temp_byte = int(round(self.state.target_temperature * 2))
+
             # If currently Muted, add 0x80 to bitmask to PRESERVE mute state
             if self.beeps_muted:
                 temp_byte |= 0x80
-            
+
             payload = bytearray([0x07, 0x0E, mode_id, step, temp_byte, hours, minutes, 0x00])
             await self._send_command(payload)
             return
@@ -381,15 +380,15 @@ class BedJet:
             # V2 Protocol: CMD_SET_SETTINGS (0x11)
             # Settings Byte: Bit 0 = Mute, Bit 1 = LED Off
             settings_byte = 0x00
-            
+
             # Preserve current Mute state
-            if self.beeps_muted: 
+            if self.beeps_muted:
                 settings_byte |= 0x01
-            
+
             # Apply new LED state (Bit 1 is "Off")
-            if not led: 
+            if not led:
                 settings_byte |= 0x02
-            
+
             await self._send_command(bytearray([0x02, 0x11, settings_byte]))
             self._led_enabled = led
             self._fire_callbacks()
@@ -406,16 +405,17 @@ class BedJet:
         """Set muted."""
         if self._is_v2:
             # V2 Protocol: CMD_SET_SETTINGS (0x11)
+            # Settings Byte: Bit 0 = Mute, Bit 1 = LED Off
             settings_byte = 0x00
-            
+
             # Apply new Mute state
-            if muted: 
+            if muted:
                 settings_byte |= 0x01
-                
+
             # Preserve current LED state (Bit 1 is "Off")
-            if self.led_enabled is False: 
+            if self.led_enabled is False:
                 settings_byte |= 0x02
-            
+
             await self._send_command(bytearray([0x02, 0x11, settings_byte]))
             self._beeps_muted = muted
             self._fire_callbacks()
@@ -437,7 +437,7 @@ class BedJet:
             elif operating_mode == OperatingMode.HEAT: target_btn = 0x02
             elif operating_mode == OperatingMode.COOL: target_btn = 0x03
             elif operating_mode == OperatingMode.EXTENDED_HEAT: target_btn = 0x02
-            
+
             # Handle OFF (Standby)
             if operating_mode == OperatingMode.STANDBY:
                 # Toggle current mode to turn off
@@ -446,7 +446,7 @@ class BedJet:
                 if curr == OperatingMode.TURBO: off_btn = 0x01
                 elif curr == OperatingMode.HEAT: off_btn = 0x02
                 elif curr == OperatingMode.COOL: off_btn = 0x03
-                
+
                 if off_btn:
                     await self._send_command(bytearray([0x02, 0x01, off_btn]))
                     try:
@@ -500,13 +500,12 @@ class BedJet:
         """Set temperature."""
         if self._is_v2:
             # V2 Protocol: CMD_SET_TEMP (0x02 0x07)
-            temp_f = (temperature * 9/5) + 32
-            temp_byte = int(round((temp_f - 32) / 0.9))
-            
+            temp_byte = int(round(temperature * 2))
+
             # Preserve Mute State
             if self.beeps_muted:
                 temp_byte |= 0x80
-            
+
             await self._send_command(bytearray([0x02, 0x07, temp_byte]))
             return
 
@@ -518,12 +517,12 @@ class BedJet:
         """Update the BedJet."""
         _LOGGER.debug("%s: Updating", self.name_and_address)
         await self._ensure_connected()
-        
+
         if not self._is_v2:
             await self._read_device_status()
             await self._read_memory_names()
             await self._read_biorhythm_names()
-        
+
         try:
             async with asyncio.timeout(5.0):
                 while self._state.current_temperature == 0:
@@ -573,7 +572,7 @@ class BedJet:
                 self._ble_device,
                 self.name,
                 self._disconnected,
-                use_services_cache=False, # Disable cache for accurate V2 detection
+                use_services_cache=True,
                 ble_device_callback=lambda: self._ble_device,
             )
             _LOGGER.debug("%s: Connected", self.name_and_address)
@@ -585,7 +584,7 @@ class BedJet:
             if client.services.get_characteristic(ISSC_STATUS_UUID):
                 self._is_v2 = True
                 status_uuid = ISSC_STATUS_UUID
-                await asyncio.sleep(3.0) 
+                await asyncio.sleep(3.0)
                 # V2 Init Packet (Wake Up)
                 await client.write_gatt_char(ISSC_COMMAND_UUID, bytearray([0x58, 0x01, 0x0b, 0x9b]), response=False)
             else:
@@ -593,7 +592,7 @@ class BedJet:
                 status_uuid = BEDJET_STATUS_UUID
 
             _LOGGER.debug("%s: Subscribe to notifications", self.name_and_address)
-            
+
             for attempt in range(3):
                 try:
                     await client.start_notify(
@@ -619,7 +618,9 @@ class BedJet:
 
     def _notification_check_handler(self, data: bytes) -> bool:
         """Verify notification data matches expected length."""
-        return len(data) == 20 or len(data) == 14
+        if self._is_v2:
+            return len(data) == 14
+        return len(data) == 20
 
     def _notification_handler(
         self, _sender: BleakGATTCharacteristic, data: bytearray
@@ -713,8 +714,8 @@ class BedJet:
 
         # --- TURBO FALLBACK ---
         if b5 in (0x01, 0x02, 0x03, 0x04) and operating_mode == OperatingMode.STANDBY:
-             operating_mode = OperatingMode.TURBO
-             fan_speed = 100
+            operating_mode = OperatingMode.TURBO
+            fan_speed = 100
 
         # Retain Fan Speed if Off (prevents UI error)
         if operating_mode == OperatingMode.STANDBY:
@@ -735,10 +736,10 @@ class BedJet:
             decode_temp_c(data[3]), _now
         )
         target_temp_c = decode_temp_c(data[7])
-        
+
         # --- TURBO OVERRIDE (109F) ---
         if operating_mode == OperatingMode.TURBO:
-             target_temp_c = 42.7
+            target_temp_c = 42.7
 
         hours = b5 >> 4
         sub_raw = ((b5 & 0x0F) << 8) | data[6]
@@ -972,7 +973,7 @@ class BedJet:
             _LOGGER.debug(
                 "%s: Sending command: %s", self.name_and_address, command.hex()
             )
-            
+
             if self._is_v2:
                 # WRAPPER: 0x58 + CMD + CHECKSUM
                 v2_payload = bytearray([0x58]) + command
