@@ -84,7 +84,7 @@ class BedJetClimateEntity(BedJetEntity, ClimateEntity):
     """Representation of BedJet device."""
 
     _attr_fan_modes = [f"{speed}%" for speed in (range(5, 101, 5))]
-	# _attr_hvac_modes will be set dynamically in __init__
+    # _attr_hvac_modes will be set dynamically in __init__
     _attr_name = None
     _attr_supported_features = (
         ClimateEntityFeature.TARGET_TEMPERATURE

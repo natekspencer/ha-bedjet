@@ -24,6 +24,7 @@ _LOGGER = logging.getLogger(__name__)
 
 LOCAL_NAMES = {"BEDJET_V3", "BEDJET"}
 
+
 async def connect_bedjet(device: BLEDevice) -> tuple[bool, str]:
     """Connect to a BedJet and return return status and success or error."""
     bedjet = BedJet(device)
@@ -114,7 +115,10 @@ class BedjetDeviceConfigFlow(ConfigFlow, domain=DOMAIN):
                     discovery.address in current_addresses
                     or discovery.address in self._discovered_devices
                     or (
-                        not any(discovery.name.startswith(local_name) for local_name in LOCAL_NAMES)
+                        not any(
+                            discovery.name.startswith(local_name)
+                            for local_name in LOCAL_NAMES
+                        )
                         and ISSC_SERVICE_UUID not in discovery.service_uuids
                     )
                 ):
