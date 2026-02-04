@@ -87,8 +87,8 @@ class TemperatureLimiter:
         Args:
             temperature: The newly received temperature reading.
             now: Optional timestamp for the reading. If not provided, the current
-                 UTC time will be used. Supplying this is useful for testing or when
-                 multiple values should share the same timestamp.
+                  UTC time will be used. Supplying this is useful for testing or when
+                  multiple values should share the same timestamp.
 
         Returns:
             The temperature value that should be reported after applying the
@@ -346,10 +346,13 @@ class BedJet:
             # Packet: 58 07 0E [MODE] [STEP] [TEMP] [HRS] [MIN] 00 [CHK]
 
             # 1. Determine Mode ID from current state
-            mode_id = 0x02 # Default Heat
-            if self.state.operating_mode == OperatingMode.TURBO: mode_id = 0x01
-            elif self.state.operating_mode == OperatingMode.HEAT: mode_id = 0x02
-            elif self.state.operating_mode == OperatingMode.COOL: mode_id = 0x03
+            mode_id = 0x02  # Default Heat
+            if self.state.operating_mode == OperatingMode.TURBO:
+                mode_id = 0x01
+            elif self.state.operating_mode == OperatingMode.HEAT:
+                mode_id = 0x02
+            elif self.state.operating_mode == OperatingMode.COOL:
+                mode_id = 0x03
 
             # 2. Calculate Fan Step
             step = int(fan_speed / 5)
@@ -366,7 +369,9 @@ class BedJet:
             if self.beeps_muted:
                 temp_byte |= 0x80
 
-            payload = bytearray([0x07, 0x0E, mode_id, step, temp_byte, hours, minutes, 0x00])
+            payload = bytearray(
+                [0x07, 0x0E, mode_id, step, temp_byte, hours, minutes, 0x00]
+            )
             await self._send_command(payload)
             return
 
@@ -433,33 +438,46 @@ class BedJet:
         if self._is_v2:
             # V2 Protocol: Button Events (0x02)
             target_btn = None
-            if operating_mode == OperatingMode.TURBO: target_btn = 0x01
-            elif operating_mode == OperatingMode.HEAT: target_btn = 0x02
-            elif operating_mode == OperatingMode.COOL: target_btn = 0x03
-            elif operating_mode == OperatingMode.EXTENDED_HEAT: target_btn = 0x02
+            if operating_mode == OperatingMode.TURBO:
+                target_btn = 0x01
+            elif operating_mode == OperatingMode.HEAT:
+                target_btn = 0x02
+            elif operating_mode == OperatingMode.COOL:
+                target_btn = 0x03
+            elif operating_mode == OperatingMode.EXTENDED_HEAT:
+                target_btn = 0x02
 
             # Handle OFF (Standby)
             if operating_mode == OperatingMode.STANDBY:
                 # Toggle current mode to turn off
                 curr = self.state.operating_mode
                 off_btn = None
-                if curr == OperatingMode.TURBO: off_btn = 0x01
-                elif curr == OperatingMode.HEAT: off_btn = 0x02
-                elif curr == OperatingMode.COOL: off_btn = 0x03
+                if curr == OperatingMode.TURBO:
+                    off_btn = 0x01
+                elif curr == OperatingMode.HEAT:
+                    off_btn = 0x02
+                elif curr == OperatingMode.COOL:
+                    off_btn = 0x03
 
                 if off_btn:
                     await self._send_command(bytearray([0x02, 0x01, off_btn]))
                     try:
                         async with asyncio.timeout(1):
-                            while self.state.operating_mode != OperatingMode.STANDBY:
+                            while (
+                                self.state.operating_mode != OperatingMode.STANDBY
+                            ):
                                 await asyncio.sleep(0.1)
-                    except TimeoutError: pass
+                    except TimeoutError:
+                        pass
                 return
 
             # Handle ON (Mode Switch)
             if target_btn:
                 # If already in mode, do nothing (unless it's Turbo, which we might want to refresh)
-                if operating_mode != OperatingMode.TURBO and self.state.operating_mode == operating_mode:
+                if (
+                    operating_mode != OperatingMode.TURBO
+                    and self.state.operating_mode == operating_mode
+                ):
                     return
 
                 await self._send_command(bytearray([0x02, 0x01, target_btn]))
@@ -467,7 +485,8 @@ class BedJet:
                     async with asyncio.timeout(1):
                         while self.state.operating_mode != operating_mode:
                             await asyncio.sleep(0.1)
-                except TimeoutError: pass
+                except TimeoutError:
+                    pass
             return
 
         # Original V3 Command
@@ -488,7 +507,7 @@ class BedJet:
     async def set_runtime_remaining(self, hours: int = 0, minutes: int = 0) -> None:
         """Set runtime remaining."""
         if self._is_v2:
-            return # V2 Runtime set via Fan/Mode commands, not standalone
+            return  # V2 Runtime set via Fan/Mode commands, not standalone
 
         if minutes >= 60:
             hours += int(minutes / 60)
@@ -586,7 +605,11 @@ class BedJet:
                 status_uuid = ISSC_STATUS_UUID
                 await asyncio.sleep(3.0)
                 # V2 Init Packet (Wake Up)
-                await client.write_gatt_char(ISSC_COMMAND_UUID, bytearray([0x58, 0x01, 0x0b, 0x9b]), response=False)
+                await client.write_gatt_char(
+                    ISSC_COMMAND_UUID,
+                    bytearray([0x58, 0x01, 0x0B, 0x9B]),
+                    response=False,
+                )
             else:
                 self._is_v2 = False
                 status_uuid = BEDJET_STATUS_UUID
@@ -598,11 +621,14 @@ class BedJet:
                     await client.start_notify(
                         status_uuid,
                         self._notification_handler,
-                        cb={"notification_discriminator": self._notification_check_handler},
+                        cb={
+                            "notification_discriminator": self._notification_check_handler
+                        },
                     )
                     break
                 except Exception as e:
-                    if attempt == 2: raise e
+                    if attempt == 2:
+                        raise e
                     await asyncio.sleep(1.0)
 
             if not self._is_v2:
@@ -749,6 +775,7 @@ class BedJet:
         # --- STATUS FLAGS (Byte 8) ---
         self._beeps_muted = bool(data[8] & 0x80)
         self._led_enabled = not bool(data[3] & 0x80)
+        
         turbo_time = max(0, 600 - data[11])
 
         self._state = BedJetState(
