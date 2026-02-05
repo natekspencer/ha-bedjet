@@ -18,11 +18,11 @@ from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_ADDRESS
 
 from .const import DOMAIN
-from .pybedjet import BedJet
+from .pybedjet import BedJet, BEDJET_V2_SERVICE_UUID
 
 _LOGGER = logging.getLogger(__name__)
 
-LOCAL_NAMES = {"BEDJET_V3"}
+LOCAL_NAMES = {"BEDJET_V3", "BEDJET"}
 
 
 async def connect_bedjet(device: BLEDevice) -> tuple[bool, str]:
@@ -114,9 +114,12 @@ class BedjetDeviceConfigFlow(ConfigFlow, domain=DOMAIN):
                 if (
                     discovery.address in current_addresses
                     or discovery.address in self._discovered_devices
-                    or not any(
-                        discovery.name.startswith(local_name)
-                        for local_name in LOCAL_NAMES
+                    or (
+                        not any(
+                            discovery.name.startswith(local_name)
+                            for local_name in LOCAL_NAMES
+                        )
+                        and BEDJET_V2_SERVICE_UUID not in discovery.service_uuids
                     )
                 ):
                     continue

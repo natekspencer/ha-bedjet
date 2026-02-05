@@ -29,7 +29,7 @@ class BedJetEntity(CoordinatorEntity[DataUpdateCoordinator[None]]):
         self._attr_device_info = DeviceInfo(
             name=name,
             manufacturer="BedJet",
-            model="BedJet 3",
+            model=device.model,
             sw_version=device.firmware_version,
             connections={(dr.CONNECTION_BLUETOOTH, device.address)},
         )
