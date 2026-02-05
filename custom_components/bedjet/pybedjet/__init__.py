@@ -444,6 +444,8 @@ class BedJet:
                 target_btn = 0x02
             elif operating_mode == OperatingMode.COOL:
                 target_btn = 0x03
+            elif operating_mode != OperatingMode.STANDBY:
+                raise ValueError(f"Unsupported V2 operating mode: {operating_mode}")
 
             # Handle OFF (Standby)
             if operating_mode == OperatingMode.STANDBY:
@@ -461,7 +463,9 @@ class BedJet:
                     await self._send_command(bytearray([0x02, 0x01, off_btn]))
                     try:
                         async with asyncio.timeout(1):
-                            while self.state.operating_mode != OperatingMode.STANDBY:
+                            while (
+                                self.state.operating_mode != OperatingMode.STANDBY
+                            ):
                                 await asyncio.sleep(0.1)
                     except TimeoutError:
                         pass
