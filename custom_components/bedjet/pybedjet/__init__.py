@@ -463,9 +463,7 @@ class BedJet:
                     await self._send_command(bytearray([0x02, 0x01, off_btn]))
                     try:
                         async with asyncio.timeout(5):
-                            while (
-                                self.state.operating_mode != OperatingMode.STANDBY
-                            ):
+                            while self.state.operating_mode != OperatingMode.STANDBY:
                                 await asyncio.sleep(0.1)
                     except TimeoutError:
                         _LOGGER.warning(
@@ -766,7 +764,6 @@ class BedJet:
         # --- TEMPERATURE ---
         def decode_temp_c(byte_val):
             return (byte_val & 0x7F) / 2
-                                       
 
         current_temp_c = self._current_temperature_limiter.update(
             decode_temp_c(data[3]), _now
