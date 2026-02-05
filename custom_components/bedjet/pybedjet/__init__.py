@@ -463,7 +463,9 @@ class BedJet:
                     await self._send_command(bytearray([0x02, 0x01, off_btn]))
                     try:
                         async with asyncio.timeout(1):
-                            while self.state.operating_mode != OperatingMode.STANDBY:
+                            while (
+                                self.state.operating_mode != OperatingMode.STANDBY
+                            ):
                                 await asyncio.sleep(0.1)
                     except TimeoutError:
                         pass
@@ -505,7 +507,11 @@ class BedJet:
     async def set_runtime_remaining(self, hours: int = 0, minutes: int = 0) -> None:
         """Set runtime remaining."""
         if self._is_v2:
-            return  # V2 Runtime set via Fan/Mode commands, not standalone
+            _LOGGER.warning(
+                "%s: set_runtime_remaining is not supported on V2 devices",
+                self.name_and_address,
+            )
+            return
 
         if minutes >= 60:
             hours += int(minutes / 60)
