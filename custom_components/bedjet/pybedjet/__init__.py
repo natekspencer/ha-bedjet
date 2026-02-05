@@ -39,9 +39,9 @@ BEDJET_BIODATA_FULL_UUID = "00002006-bed0-0080-aa55-4265644a6574"
 CLIENT_CHARACTERISTIC_CONFIG = "00002902-0000-1000-8000-00805f9b34fb"
 
 # ISSC BedJet V2 UUIDs
-ISSC_SERVICE_UUID = "49535343-fe7d-4ae5-8fa9-9fafd205e455"
-ISSC_STATUS_UUID = "49535343-1e4d-4bd9-ba61-23c647249616"
-ISSC_COMMAND_UUID = "49535343-8841-43f4-a8d4-ecbe34729bb3"
+BEDJET_V2_SERVICE_UUID = "49535343-fe7d-4ae5-8fa9-9fafd205e455"
+BEDJET_V2_STATUS_UUID = "49535343-1e4d-4bd9-ba61-23c647249616"
+BEDJET_V2_COMMAND_UUID = "49535343-8841-43f4-a8d4-ecbe34729bb3"
 
 DISCONNECT_DELAY = 60
 
@@ -363,7 +363,7 @@ class BedJet:
             minutes = (total_seconds % 3600) // 60
 
             # 4. Handle Temperature and Mute Flag
-            temp_byte = int(round(self.state.target_temperature * 2))
+            temp_byte = round(self.state.target_temperature * 2)
 
             # If currently Muted, add 0x80 to bitmask to PRESERVE mute state
             if self.beeps_muted:
@@ -444,8 +444,6 @@ class BedJet:
                 target_btn = 0x02
             elif operating_mode == OperatingMode.COOL:
                 target_btn = 0x03
-            elif operating_mode == OperatingMode.EXTENDED_HEAT:
-                target_btn = 0x02
 
             # Handle OFF (Standby)
             if operating_mode == OperatingMode.STANDBY:
@@ -517,7 +515,7 @@ class BedJet:
         """Set temperature."""
         if self._is_v2:
             # V2 Protocol: CMD_SET_TEMP (0x02 0x07)
-            temp_byte = int(round(temperature * 2))
+            temp_byte = round(temperature * 2)
 
             # Preserve Mute State
             if self.beeps_muted:
@@ -598,13 +596,13 @@ class BedJet:
             self._reset_disconnect_timer()
 
             # V2 Protocol Detection
-            if client.services.get_characteristic(ISSC_STATUS_UUID):
+            if client.services.get_characteristic(BEDJET_V2_STATUS_UUID):
                 self._is_v2 = True
-                status_uuid = ISSC_STATUS_UUID
+                status_uuid = BEDJET_V2_STATUS_UUID
                 await asyncio.sleep(3.0)
                 # V2 Init Packet (Wake Up)
                 await client.write_gatt_char(
-                    ISSC_COMMAND_UUID,
+                    BEDJET_V2_COMMAND_UUID,
                     bytearray([0x58, 0x01, 0x0B, 0x9B]),
                     response=False,
                 )
@@ -626,7 +624,7 @@ class BedJet:
                     break
                 except Exception as e:
                     if attempt == 2:
-                        raise e
+                        raise
                     await asyncio.sleep(1.0)
 
             if not self._is_v2:
@@ -872,7 +870,7 @@ class BedJet:
             self._client = None
             if client and client.is_connected:
                 try:
-                    uuid = ISSC_STATUS_UUID if self._is_v2 else BEDJET_STATUS_UUID
+                    uuid = BEDJET_V2_STATUS_UUID if self._is_v2 else BEDJET_STATUS_UUID
                     await client.stop_notify(uuid)
                 except BleakError:
                     _LOGGER.debug(
@@ -1007,7 +1005,7 @@ class BedJet:
                 v2_payload.append(checksum)
                 # Send V2 Packet
                 await self._client.write_gatt_char(
-                    ISSC_COMMAND_UUID, v2_payload, response=False
+                    BEDJET_V2_COMMAND_UUID, v2_payload, response=False
                 )
             else:
                 # Original V3 Command
