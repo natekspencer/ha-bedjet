@@ -463,9 +463,7 @@ class BedJet:
                     await self._send_command(bytearray([0x02, 0x01, off_btn]))
                     try:
                         async with asyncio.timeout(1):
-                            while (
-                                self.state.operating_mode != OperatingMode.STANDBY
-                            ):
+                            while self.state.operating_mode != OperatingMode.STANDBY:
                                 await asyncio.sleep(0.1)
                     except TimeoutError:
                         pass
