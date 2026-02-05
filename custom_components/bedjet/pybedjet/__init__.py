@@ -622,7 +622,7 @@ class BedJet:
                         },
                     )
                     break
-                except Exception as e:
+                except Exception:
                     if attempt == 2:
                         raise
                     await asyncio.sleep(1.0)
