@@ -462,11 +462,16 @@ class BedJet:
                 if off_btn:
                     await self._send_command(bytearray([0x02, 0x01, off_btn]))
                     try:
-                        async with asyncio.timeout(1):
-                            while self.state.operating_mode != OperatingMode.STANDBY:
+                        async with asyncio.timeout(5):
+                            while (
+                                self.state.operating_mode != OperatingMode.STANDBY
+                            ):
                                 await asyncio.sleep(0.1)
                     except TimeoutError:
-                        pass
+                        _LOGGER.warning(
+                            "%s: Could not confirm V2 operating mode change in 5 seconds",
+                            self.name_and_address,
+                        )
                 return
 
             # Handle ON (Mode Switch)
@@ -480,11 +485,14 @@ class BedJet:
 
                 await self._send_command(bytearray([0x02, 0x01, target_btn]))
                 try:
-                    async with asyncio.timeout(1):
+                    async with asyncio.timeout(5):
                         while self.state.operating_mode != operating_mode:
                             await asyncio.sleep(0.1)
                 except TimeoutError:
-                    pass
+                    _LOGGER.warning(
+                        "%s: Could not confirm V2 operating mode change in 5 seconds",
+                        self.name_and_address,
+                    )
             return
 
         # Original V3 Command
@@ -747,18 +755,18 @@ class BedJet:
 
         # Retain Fan Speed if Off (prevents UI error)
         if operating_mode == OperatingMode.STANDBY:
-            fan_speed = self._state.fan_speed
+            fan_speed = self._state.fan_speed if self._state.fan_speed > 0 else 5
         else:
             if fan_speed > 0:
-                fan_speed = int(round(fan_speed / 5.0) * 5)
+                fan_speed = round(fan_speed / 5.0) * 5
                 fan_speed = max(5, min(100, fan_speed))
             else:
                 fan_speed = 5
 
         # --- TEMPERATURE ---
         def decode_temp_c(byte_val):
-            raw_f = int(((byte_val & 0x7F) * 0.9) + 32)
-            return (raw_f - 32) * 5 / 9
+            return (byte_val & 0x7F) / 2
+                                       
 
         current_temp_c = self._current_temperature_limiter.update(
             decode_temp_c(data[3]), _now
