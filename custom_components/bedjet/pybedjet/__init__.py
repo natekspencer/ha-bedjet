@@ -328,7 +328,7 @@ class BedJet:
         await self._send_command(command)
 
     async def set_led(self, led: bool) -> None:
-        """Set muted."""
+        """Set LED."""
         if self._is_v2:
             # V2 Protocol: CMD_SET_SETTINGS (0x11)
             # Settings Byte: Bit 0 = Mute, Bit 1 = LED Off
