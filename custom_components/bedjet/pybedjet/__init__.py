@@ -46,6 +46,7 @@ BEDJET3_COMMAND_UUID = "00002004-bed0-0080-aa55-4265644a6574"
 BEDJET3_BIODATA_UUID = "00002005-bed0-0080-aa55-4265644a6574"
 BEDJET3_BIODATA_FULL_UUID = "00002006-bed0-0080-aa55-4265644a6574"
 BEDJET3_NOTIFICATION_LENGTH = 20
+BEDJET3_STATUS_LENGTH = 11
 
 CLIENT_CHARACTERISTIC_CONFIG = "00002902-0000-1000-8000-00805f9b34fb"
 
@@ -683,29 +684,29 @@ class BedJet:
         operating_mode = OperatingMode.STANDBY
         fan_speed = 0
 
-        # --- MODE & FAN DETECTION ---
-        # 1. COOL: 97-116
+        # Mode and fan detection
+        # COOL: 97-116
         if 97 <= b4 <= 116:
             operating_mode = OperatingMode.COOL
             fan_speed = (b4 - 96) * 5
-        # 2. HEAT: 65-84
+        # HEAT: 65-84
         elif 65 <= b4 <= 84:
             operating_mode = OperatingMode.HEAT
             fan_speed = (b4 - 64) * 5
-        # 3. TURBO: 33-52 (0x21-0x34)
+        # TURBO: 33-52 (0x21-0x34)
         elif 33 <= b4 <= 52:
             operating_mode = OperatingMode.TURBO
             fan_speed = (b4 - 32) * 5
-        # 4. OFF: 0x14 (20) or 0x0E (14) or Byte5=0
+        # OFF: 0x14 (20) or 0x0E (14) or Byte5=0
         elif b4 == 0x14 or b4 == 0x0E or b5 == 0x00:
             operating_mode = OperatingMode.STANDBY
 
-        # --- TURBO FALLBACK ---
+        # Turbo fallback
         if b5 in (0x01, 0x02, 0x03, 0x04) and operating_mode == OperatingMode.STANDBY:
             operating_mode = OperatingMode.TURBO
             fan_speed = 100
 
-        # Retain Fan Speed if Off (prevents UI error)
+        # Retain fan speed if off (prevents UI error)
         if operating_mode == OperatingMode.STANDBY:
             fan_speed = self._state.fan_speed if self._state.fan_speed > 0 else 5
         else:
@@ -715,18 +716,21 @@ class BedJet:
             else:
                 fan_speed = 5
 
-        # --- TEMPERATURE ---
-        def decode_temp_c(byte_val):
+        def decode_temperature(byte_val: int) -> float:
+            """Decode temperature from a V2 notification.
+
+            Temperatures are reported in degrees Celsius * 2.
+            """
             return (byte_val & 0x7F) / 2
 
-        current_temp_c = self._current_temperature_limiter.update(
-            decode_temp_c(data[3]), _now
+        current_temperature = self._current_temperature_limiter.update(
+            decode_temperature(data[3]), _now
         )
-        target_temp_c = decode_temp_c(data[7])
+        target_temperature = decode_temperature(data[7])
 
-        # --- TURBO OVERRIDE (109F) ---
+        # Turbo override (109F)
         if operating_mode == OperatingMode.TURBO:
-            target_temp_c = 42.7
+            target_temperature = 42.7
 
         hours = b5 >> 4
         sub_raw = ((b5 & 0x0F) << 8) | data[6]
@@ -734,15 +738,15 @@ class BedJet:
         runtime_remaining = timedelta(seconds=total_seconds)
         run_end_time = self._run_end_time_limiter.update(runtime_remaining, _now)
 
-        # --- STATUS FLAGS (Byte 8) ---
+        # Status flags (byte 8)
         self._beeps_muted = bool(data[8] & 0x80)
         self._led_enabled = not bool(data[3] & 0x80)
 
         turbo_time = max(0, 600 - data[11])
 
         self._state = BedJetState(
-            current_temperature=current_temp_c,
-            target_temperature=target_temp_c,
+            current_temperature=current_temperature,
+            target_temperature=target_temperature,
             operating_mode=operating_mode,
             runtime_remaining=runtime_remaining,
             run_end_time=run_end_time,
@@ -751,7 +755,7 @@ class BedJet:
             fan_speed=fan_speed,
             minimum_temperature=19.0,
             maximum_temperature=43.0,
-            ambient_temperature=current_temp_c,
+            ambient_temperature=current_temperature,
         )
         self._fire_callbacks()
 
@@ -761,7 +765,10 @@ class BedJet:
         tag = data[1:2].hex()
         message = "Unknown bio data"
 
-        def parse_text(data: bytearray, length: int | None = None, lead_bits: int = 0):
+        def parse_text(
+            data: bytearray, length: int | None = None, lead_bits: int = 0
+        ) -> str | list[str | list | None] | None:
+            """Parse text from a byte array."""
             if lead_bits:
                 data = data[lead_bits:]
             if not length:
@@ -865,7 +872,7 @@ class BedJet:
             data = await self._client.read_gatt_char(BEDJET3_STATUS_UUID)
             self._last_update = datetime.now(UTC)
 
-            if len(data) != 11:
+            if len(data) != BEDJET3_STATUS_LENGTH:
                 _LOGGER.debug(
                     "%s: Unexpected device status received: %s",
                     self.name_and_address,
