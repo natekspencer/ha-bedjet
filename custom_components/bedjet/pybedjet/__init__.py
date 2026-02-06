@@ -29,20 +29,25 @@ from .limiter import EndTimeLimiter, TemperatureLimiter
 
 _LOGGER = logging.getLogger(__name__)
 
-BEDJET_SERVICE_UUID = "00001000-bed0-0080-aa55-4265644a6574"
-BEDJET_STATUS_UUID = "00002000-bed0-0080-aa55-4265644a6574"
-BEDJET_NAME_UUID = "00002001-bed0-0080-aa55-4265644a6574"
-BEDJET_SSID_UUID = "00002002-bed0-0080-aa55-4265644a6574"
-BEDJET_PASSWD_UUID = "00002003-bed0-0080-aa55-4265644a6574"
-BEDJET_COMMAND_UUID = "00002004-bed0-0080-aa55-4265644a6574"
-BEDJET_BIODATA_UUID = "00002005-bed0-0080-aa55-4265644a6574"
-BEDJET_BIODATA_FULL_UUID = "00002006-bed0-0080-aa55-4265644a6574"
-CLIENT_CHARACTERISTIC_CONFIG = "00002902-0000-1000-8000-00805f9b34fb"
 
-# ISSC BedJet V2 UUIDs
-BEDJET_V2_SERVICE_UUID = "49535343-fe7d-4ae5-8fa9-9fafd205e455"
-BEDJET_V2_STATUS_UUID = "49535343-1e4d-4bd9-ba61-23c647249616"
-BEDJET_V2_COMMAND_UUID = "49535343-8841-43f4-a8d4-ecbe34729bb3"
+# BedJet V2 UUIDs (ISSC)
+BEDJET2_SERVICE_UUID = "49535343-fe7d-4ae5-8fa9-9fafd205e455"
+BEDJET2_STATUS_UUID = "49535343-1e4d-4bd9-ba61-23c647249616"
+BEDJET2_COMMAND_UUID = "49535343-8841-43f4-a8d4-ecbe34729bb3"
+BEDJET2_NOTIFICATION_LENGTH = 14
+
+# BedJet 3 UUIDs (ISSC)
+BEDJET3_SERVICE_UUID = "00001000-bed0-0080-aa55-4265644a6574"
+BEDJET3_STATUS_UUID = "00002000-bed0-0080-aa55-4265644a6574"
+BEDJET3_NAME_UUID = "00002001-bed0-0080-aa55-4265644a6574"
+BEDJET3_SSID_UUID = "00002002-bed0-0080-aa55-4265644a6574"
+BEDJET3_PASSWORD_UUID = "00002003-bed0-0080-aa55-4265644a6574"
+BEDJET3_COMMAND_UUID = "00002004-bed0-0080-aa55-4265644a6574"
+BEDJET3_BIODATA_UUID = "00002005-bed0-0080-aa55-4265644a6574"
+BEDJET3_BIODATA_FULL_UUID = "00002006-bed0-0080-aa55-4265644a6574"
+BEDJET3_NOTIFICATION_LENGTH = 20
+
+CLIENT_CHARACTERISTIC_CONFIG = "00002902-0000-1000-8000-00805f9b34fb"
 
 DISCONNECT_DELAY = 60
 
@@ -147,7 +152,7 @@ class BedJet:
     @property
     def model(self) -> str:
         """Return the model name based on the device version."""
-        return "BedJet V2" if self.is_v2 else "BedJet 3"
+        return f"BedJet {'V2' if self._is_v2 else '3'}"
 
     @property
     def beeps_muted(self) -> bool | None:
@@ -550,19 +555,19 @@ class BedJet:
             self._reset_disconnect_timer()
 
             # V2 Protocol Detection
-            if client.services.get_characteristic(BEDJET_V2_STATUS_UUID):
+            if client.services.get_characteristic(BEDJET2_STATUS_UUID):
                 self._is_v2 = True
-                status_uuid = BEDJET_V2_STATUS_UUID
+                status_uuid = BEDJET2_STATUS_UUID
                 await asyncio.sleep(3.0)
                 # V2 Init Packet (Wake Up)
                 await client.write_gatt_char(
-                    BEDJET_V2_COMMAND_UUID,
+                    BEDJET2_COMMAND_UUID,
                     bytearray([0x58, 0x01, 0x0B, 0x9B]),
                     response=False,
                 )
             else:
                 self._is_v2 = False
-                status_uuid = BEDJET_STATUS_UUID
+                status_uuid = BEDJET3_STATUS_UUID
 
             _LOGGER.debug("%s: Subscribe to notifications", self.name_and_address)
 
@@ -595,8 +600,8 @@ class BedJet:
     def _notification_check_handler(self, data: bytes) -> bool:
         """Verify notification data matches expected length."""
         if self._is_v2:
-            return len(data) == 14
-        return len(data) == 20
+            return len(data) == BEDJET2_NOTIFICATION_LENGTH
+        return len(data) == BEDJET3_NOTIFICATION_LENGTH
 
     def _notification_handler(
         self, _sender: BleakGATTCharacteristic, data: bytearray
@@ -614,7 +619,7 @@ class BedJet:
             self._handle_v2_notification(data, _now)
             return
 
-        if len(data) != 20:
+        if len(data) != BEDJET3_NOTIFICATION_LENGTH:
             _LOGGER.debug(
                 "%s: Unexpected notification received: %s",
                 self.name_and_address,
@@ -649,24 +654,29 @@ class BedJet:
         fan_speed = (fan_step + 1) * 5
 
         self._state = BedJetState(
-            current_temperature,
-            target_temperature,
-            operating_mode,
-            runtime_remaining,
-            run_end_time,
-            maximum_runtime,
-            timedelta(seconds=turbo_time),
-            fan_speed,
-            minimum_temperature,
-            maximum_temperature,
-            ambient_temperature,
+            current_temperature=current_temperature,
+            target_temperature=target_temperature,
+            operating_mode=operating_mode,
+            runtime_remaining=runtime_remaining,
+            run_end_time=run_end_time,
+            maximum_runtime=maximum_runtime,
+            turbo_time=timedelta(seconds=turbo_time),
+            fan_speed=fan_speed,
+            minimum_temperature=minimum_temperature,
+            maximum_temperature=maximum_temperature,
+            ambient_temperature=ambient_temperature,
         )
 
         self._fire_callbacks()
 
     def _handle_v2_notification(self, data: bytearray, _now: datetime) -> None:
         """Handle ISSC V2 notification responses."""
-        if len(data) != 14:
+        if len(data) != BEDJET2_NOTIFICATION_LENGTH:
+            _LOGGER.debug(
+                "%s: Unexpected notification received: %s",
+                self.name_and_address,
+                data.hex(),
+            )
             return
 
         b4, b5 = data[4], data[5]
@@ -722,6 +732,7 @@ class BedJet:
         sub_raw = ((b5 & 0x0F) << 8) | data[6]
         total_seconds = hours * 3600 + (sub_raw * 60 + 32) // 64
         runtime_remaining = timedelta(seconds=total_seconds)
+        run_end_time = self._run_end_time_limiter.update(runtime_remaining, _now)
 
         # --- STATUS FLAGS (Byte 8) ---
         self._beeps_muted = bool(data[8] & 0x80)
@@ -734,6 +745,7 @@ class BedJet:
             target_temperature=target_temp_c,
             operating_mode=operating_mode,
             runtime_remaining=runtime_remaining,
+            run_end_time=run_end_time,
             maximum_runtime=timedelta(hours=10),
             turbo_time=timedelta(seconds=turbo_time),
             fan_speed=fan_speed,
@@ -825,7 +837,7 @@ class BedJet:
             self._client = None
             if client and client.is_connected:
                 try:
-                    uuid = BEDJET_V2_STATUS_UUID if self._is_v2 else BEDJET_STATUS_UUID
+                    uuid = BEDJET2_STATUS_UUID if self._is_v2 else BEDJET3_STATUS_UUID
                     await client.stop_notify(uuid)
                 except BleakError:
                     _LOGGER.debug(
@@ -836,10 +848,10 @@ class BedJet:
                 await client.disconnect()
 
     async def _read_device_name(self) -> None:
-        """Read device name."""
+        """Read device name (BedJet 3 only)."""
         if self._client and self._client.is_connected:
             _LOGGER.debug("%s: Read device name", self.name_and_address)
-            data = await self._client.read_gatt_char(BEDJET_NAME_UUID)
+            data = await self._client.read_gatt_char(BEDJET3_NAME_UUID)
             if (name := data.decode()) != self.name:
                 _LOGGER.debug(
                     "%s: Actual device name is %s", self.name_and_address, name
@@ -850,7 +862,7 @@ class BedJet:
         """Read device status."""
         if self._client and self._client.is_connected:
             _LOGGER.debug("%s: Read device status", self.name_and_address)
-            data = await self._client.read_gatt_char(BEDJET_STATUS_UUID)
+            data = await self._client.read_gatt_char(BEDJET3_STATUS_UUID)
             self._last_update = datetime.now(UTC)
 
             if len(data) != 11:
@@ -907,7 +919,7 @@ class BedJet:
                     (BedJetCommand.GET_BIO, BioDataRequest.FIRMWARE_VERSIONS, tag)
                 )
                 await self._send_command(command)
-                data = await self._client.read_gatt_char(BEDJET_BIODATA_FULL_UUID)
+                data = await self._client.read_gatt_char(BEDJET3_BIODATA_FULL_UUID)
                 self._parse_bio_data_response(data)
                 tag += 1
         if not self._firmware_version:
@@ -923,7 +935,7 @@ class BedJet:
                     (BedJetCommand.GET_BIO, BioDataRequest.BIORHYTHM_NAMES, tag)
                 )
                 await self._send_command(command)
-                data = await self._client.read_gatt_char(BEDJET_BIODATA_FULL_UUID)
+                data = await self._client.read_gatt_char(BEDJET3_BIODATA_FULL_UUID)
                 self._parse_bio_data_response(data)
                 tag += 1
         if not self._biorhythm_names:
@@ -939,7 +951,7 @@ class BedJet:
                     (BedJetCommand.GET_BIO, BioDataRequest.MEMORY_NAMES, tag)
                 )
                 await self._send_command(command)
-                data = await self._client.read_gatt_char(BEDJET_BIODATA_FULL_UUID)
+                data = await self._client.read_gatt_char(BEDJET3_BIODATA_FULL_UUID)
                 self._parse_bio_data_response(data)
                 tag += 1
         if not self._memory_names:
@@ -960,11 +972,11 @@ class BedJet:
                 v2_payload.append(checksum)
                 # Send V2 Packet
                 await self._client.write_gatt_char(
-                    BEDJET_V2_COMMAND_UUID, v2_payload, response=False
+                    BEDJET2_COMMAND_UUID, v2_payload, response=False
                 )
             else:
                 # Original V3 Command
-                await self._client.write_gatt_char(BEDJET_COMMAND_UUID, command)
+                await self._client.write_gatt_char(BEDJET3_COMMAND_UUID, command)
 
     async def _run_test_commands(self) -> None:
         """Run test commands."""
@@ -983,9 +995,9 @@ class BedJet:
                     self.name_and_address,
                     command.hex(),
                 )
-                await self._client.write_gatt_char(BEDJET_COMMAND_UUID, command, True)
+                await self._client.write_gatt_char(BEDJET3_COMMAND_UUID, command, True)
 
-                data = await self._client.read_gatt_char(BEDJET_BIODATA_FULL_UUID)
+                data = await self._client.read_gatt_char(BEDJET3_BIODATA_FULL_UUID)
                 self._parse_bio_data_response(data)
                 _LOGGER.debug(
                     "%s: %s/%s, %s/%s, %s, %s",
