@@ -25,6 +25,7 @@ from .const import (
     BioDataRequest,
     OperatingMode,
 )
+from .limiter import EndTimeLimiter, TemperatureLimiter
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -51,67 +52,6 @@ OPERATING_MODE_BUTTON_MAP = {
 
 STALE_AFTER_SECONDS = 60
 
-DEFAULT_TEMPERATURE_DELTA = 1.0
-DEFAULT_TEMPERATURE_TIME = timedelta(seconds=15)
-
-
-@dataclass
-class TemperatureLimiter:
-    """Limit how often a temperature value is allowed to change.
-
-    This class suppresses small, rapid fluctuations ("jitter") from fast-reporting
-    temperature sensors. A new temperature is accepted only if at least one of the
-    following conditions is met:
-
-    - The temperature changed by at least ``min_delta`` degrees.
-    - At least ``min_time`` has passed since the last accepted update.
-
-    If the incoming temperature is exactly the same as the current value, the
-    internal timer is reset to prevent a forced update due only to elapsed time.
-    """
-
-    min_delta: float = DEFAULT_TEMPERATURE_DELTA
-    min_time: timedelta = DEFAULT_TEMPERATURE_TIME
-
-    temperature: float | None = None
-    last_updated: datetime | None = None
-
-    def update(self, temperature: float, now: datetime | None = None) -> float:
-        """Process a new temperature reading and return the value to report.
-
-        Args:
-            temperature: The newly received temperature reading.
-            now: Optional timestamp for the reading. If not provided, the current
-                 UTC time will be used. Supplying this is useful for testing or when
-                 multiple values should share the same timestamp.
-
-        Returns:
-            The temperature value that should be reported after applying the
-            limiter rules. This will be either the new temperature (if accepted)
-            or the previously accepted value (if suppressed).
-        """
-        if now is None:
-            now = datetime.now(UTC)
-
-        def _accept() -> float:
-            self.temperature = temperature
-            self.last_updated = now
-            return temperature
-
-        if self.last_updated is None or self.temperature is None:
-            return _accept()
-
-        if self.temperature == temperature:
-            return _accept()  # reset timer to further reduce jitter
-
-        if (
-            abs(temperature - self.temperature) >= self.min_delta
-            or (now - self.last_updated) >= self.min_time
-        ):
-            return _accept()
-
-        return self.temperature
-
 
 @dataclass(frozen=True)
 class BedJetState:
@@ -121,6 +61,7 @@ class BedJetState:
     target_temperature: float = 0
     operating_mode: OperatingMode = OperatingMode.STANDBY
     runtime_remaining: timedelta = timedelta()
+    run_end_time: datetime | None = None
     maximum_runtime: timedelta = timedelta()
     turbo_time: timedelta = timedelta()
     fan_speed: int = 0
@@ -172,9 +113,10 @@ class BedJet:
         self._resolve_protocol_event = asyncio.Event()
         self._name: str | None = None
 
-        # temperature limiters
+        # limiters
         self._current_temperature_limiter = TemperatureLimiter()
         self._ambient_temperature_limiter = TemperatureLimiter()
+        self._run_end_time_limiter = EndTimeLimiter()
 
     def set_ble_device_and_advertisement_data(
         self, ble_device: BLEDevice, advertisement_data: AdvertisementData
@@ -491,6 +433,7 @@ class BedJet:
         runtime_remaining = timedelta(
             hours=hours_remaining, minutes=minutes_remaining, seconds=seconds_remaining
         )
+        run_end_time = self._run_end_time_limiter.update(runtime_remaining, _now)
         maximum_runtime = timedelta(hours=maximum_hours, minutes=maximum_minutes)
         fan_speed = (fan_step + 1) * 5
 
@@ -499,6 +442,7 @@ class BedJet:
             target_temperature,
             operating_mode,
             runtime_remaining,
+            run_end_time,
             maximum_runtime,
             timedelta(seconds=turbo_time),
             fan_speed,
