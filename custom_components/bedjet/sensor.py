@@ -14,7 +14,7 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.const import EntityCategory, UnitOfTemperature, UnitOfTime
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from . import BedJetConfigEntry
@@ -67,12 +67,10 @@ SENSORS = (
         ),
     ),
     BedJetSensorEntityDescription(
-        key="runtime_remaining",
-        device_class=SensorDeviceClass.DURATION,
-        native_unit_of_measurement=UnitOfTime.SECONDS,
-        suggested_unit_of_measurement=UnitOfTime.MINUTES,
-        translation_key="runtime_remaining",
-        value_fn=lambda device: device.state.runtime_remaining.total_seconds(),
+        key="run_end_time",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        translation_key="run_end_time",
+        value_fn=lambda device: device.state.run_end_time,
     ),
     BedJetSensorEntityDescription(
         key="shutdown_reason",
@@ -112,7 +110,7 @@ SENSORS = (
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: BedJetConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the sensor platform for BedJet."""
     data = entry.runtime_data

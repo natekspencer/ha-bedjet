@@ -15,7 +15,7 @@ from homeassistant.components.climate.const import DOMAIN as CLIMATE_DOMAIN
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ServiceValidationError
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util.unit_conversion import TemperatureConverter
 
@@ -52,6 +52,7 @@ HVAC_MODE_MAP = {
 }
 
 PRESET_MODE_MAP = {
+    "None": BedJetButton.HEAT,
     "Turbo": BedJetButton.TURBO,
     "Extended Heat": BedJetButton.EXTENDED_HEAT,
     # "M1": BedJetButton.M1,
@@ -73,7 +74,7 @@ BIORHYTHM_PRESETS = (
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: BedJetConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the climate platform for BedJet."""
     data = entry.runtime_data
@@ -97,13 +98,6 @@ class BedJetClimateEntity(BedJetEntity, ClimateEntity):
     """Representation of BedJet device."""
 
     _attr_fan_modes = [f"{speed}%" for speed in (range(5, 101, 5))]
-    _attr_hvac_modes = [
-        HVACMode.OFF,
-        HVACMode.COOL,
-        HVACMode.HEAT,
-        HVACMode.DRY,
-        HVACMode.AUTO,
-    ]
     _attr_name = None
     _attr_supported_features = (
         ClimateEntityFeature.TARGET_TEMPERATURE
@@ -132,6 +126,15 @@ class BedJetClimateEntity(BedJetEntity, ClimateEntity):
                 66, UnitOfTemperature.FAHRENHEIT, self.temperature_unit
             )
         )
+
+        self._attr_hvac_modes = [
+            HVACMode.OFF,
+            HVACMode.COOL,
+            HVACMode.HEAT,
+            HVACMode.AUTO,
+        ]
+        if not device.is_v2:
+            self._attr_hvac_modes.append(HVACMode.DRY)
 
         super().__init__(coordinator, device, name)
 
@@ -166,9 +169,23 @@ class BedJetClimateEntity(BedJetEntity, ClimateEntity):
             self._attr_max_temp = self._max_temp_actual
             self._attr_min_temp = self._min_temp_actual
 
+        # DYNAMIC V2 PRESETS: Filter out unsupported items
+        base_presets = list(PRESET_MODE_MAP.keys())
+        if device.is_v2:
+            if "Extended Heat" in base_presets:
+                base_presets.remove("Extended Heat")
+        else:
+            if "None" in base_presets:
+                base_presets.remove("None")
+
         self._attr_preset_mode = OPERATING_MODE_PRESET_MAP.get(state.operating_mode)
+
+        # "None" included to revert from Turbo to Heat mode
+        if device.is_v2 and self._attr_preset_mode is None:
+            self._attr_preset_mode = "None"
+
         self._attr_preset_modes = (
-            list(PRESET_MODE_MAP.keys())
+            base_presets
             + [
                 name
                 for name in (device.m1_name, device.m2_name, device.m3_name)
@@ -192,6 +209,10 @@ class BedJetClimateEntity(BedJetEntity, ClimateEntity):
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set new target hvac mode."""
+        if self._device.is_v2 and hvac_mode == HVACMode.DRY:
+            _LOGGER.warning("Dry Mode is not supported on BedJet V2")
+            return
+
         if hvac_mode == HVACMode.AUTO:
             cur_temp = self._attr_current_temperature
             target_mode = (
@@ -205,8 +226,23 @@ class BedJetClimateEntity(BedJetEntity, ClimateEntity):
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         """Set new preset mode."""
+        device = self._device
+
+        if device.is_v2:
+            if preset_mode == "Extended Heat":
+                _LOGGER.warning("Extended Heat is not supported on BedJet V2")
+                return
+
+            if preset_mode == "Turbo":
+                await device.set_operating_mode(OperatingMode.TURBO)
+                return
+
+            if preset_mode == "None":
+                if device.state.operating_mode == OperatingMode.TURBO:
+                    await device.set_operating_mode(OperatingMode.HEAT)
+                return
+
         if not (button := PRESET_MODE_MAP.get(preset_mode)):
-            device = self._device
             if preset_mode == device.m1_name:
                 button = BedJetButton.M1
             elif preset_mode == device.m2_name:
@@ -221,6 +257,7 @@ class BedJetClimateEntity(BedJetEntity, ClimateEntity):
                 button = BedJetButton.BIORHYTHM_3
             else:
                 raise ValueError(f"{preset_mode} is not a valid preset for {self.name}")
+
         await self._device._send_command(bytearray((BedJetCommand.BUTTON, button)))
 
     async def async_set_temperature(self, **kwargs: Any) -> None:

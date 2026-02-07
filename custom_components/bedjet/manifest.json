@@ -6,15 +6,30 @@
       "local_name": "BEDJET_V3",
       "service_uuid": "00001000-bed0-0080-aa55-4265644a6574",
       "connectable": true
+    },
+    {
+      "local_name": "BEDJET",
+      "service_uuid": "49535343-fe7d-4ae5-8fa9-9fafd205e455",
+      "connectable": true
     }
   ],
-  "codeowners": ["@natekspencer"],
+  "codeowners": [
+    "@natekspencer",
+    "@jdaleo23"
+  ],
   "config_flow": true,
-  "dependencies": ["bluetooth_adapters"],
+  "dependencies": [
+    "bluetooth_adapters"
+  ],
   "documentation": "https://github.com/natekspencer/ha-bedjet",
   "integration_type": "device",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/natekspencer/ha-bedjet/issues",
-  "loggers": ["custom_components.bedjet"],
+  "loggers": [
+    "custom_components.bedjet",
+    "bleak_retry_connector",
+    "bluetooth_adapters",
+    "habluetooth"
+  ],
   "version": "0.0.0"
 }

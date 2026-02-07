@@ -80,7 +80,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: BedJetConfigEntry) -> bo
         try:
             await bedjet.update()
         except BLEAK_EXCEPTIONS as ex:
-            raise UpdateFailed(str(ex)) from ex
+            if bedjet.is_data_stale:
+                raise UpdateFailed(str(ex)) from ex
+            _LOGGER.debug(
+                "%s: Update failed but data is fresh, ignoring: %s",
+                bedjet.name_and_address,
+                ex,
+            )
 
     startup_event = asyncio.Event()
     cancel_first_update = bedjet.register_callback(lambda *_: startup_event.set())
@@ -88,7 +94,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: BedJetConfigEntry) -> bo
         hass,
         _LOGGER,
         config_entry=entry,
-        name=bedjet.name,
+        name=f"{entry.title} ({entry.unique_id})",
         update_method=_async_update,
         update_interval=timedelta(seconds=UPDATE_SECONDS),
     )
@@ -105,7 +111,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: BedJetConfigEntry) -> bo
     except TimeoutError as ex:
         raise ConfigEntryNotReady(
             "Unable to communicate with the device; "
-            f"Try moving the Bluetooth adapter closer to {bedjet.name}"
+            f"Try moving the Bluetooth adapter closer to {bedjet.name_and_address}"
         ) from ex
     finally:
         cancel_first_update()
