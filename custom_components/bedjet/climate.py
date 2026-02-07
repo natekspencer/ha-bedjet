@@ -283,7 +283,7 @@ class BedJetClimateEntity(BedJetEntity, ClimateEntity):
             target_mode = temperature_to_mode(temp)
             if target_mode != self._device.state.operating_mode:
                 _LOGGER.debug(
-                    f"Automatically moving bedjet mode from %s to %s to accomodate temperature %.1f %s",
+                    "Automatically moving bedjet mode from %s to %s to accomodate temperature %.1f %s",
                     self._device.state.operating_mode.name,
                     target_mode.name,
                     temp,
