@@ -59,9 +59,11 @@ SENSORS = (
         ],
         translation_key="notification",
         value_fn=(
-            lambda device: notification.name.lower()
-            if (notification := device.notification)
-            else None
+            lambda device: (
+                notification.name.lower()
+                if (notification := device.notification)
+                else None
+            )
         ),
     ),
     BedJetSensorEntityDescription(
@@ -95,6 +97,14 @@ SENSORS = (
         entity_registry_enabled_default=False,
         translation_key="update_phase",
         value_fn=lambda device: device.update_phase,
+    ),
+    BedJetSensorEntityDescription(
+        key="operating_mode",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        translation_key="operating_mode",
+        value_fn=lambda device: device.state.operating_mode.name.replace(
+            "_", " "
+        ).title(),
     ),
 )
 
