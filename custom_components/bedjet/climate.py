@@ -142,9 +142,13 @@ class BedJetClimateEntity(BedJetEntity, ClimateEntity):
         state = device.state
         self._attr_current_temperature = state.current_temperature
         self._attr_fan_mode = f"{state.fan_speed}%"
-        self._attr_hvac_mode = (
-            self._attr_hvac_mode or OPERATING_MODE_MAP[state.operating_mode]
-        )
+
+        # Only update hass-displayed mode if:
+        if (
+            getattr(self, "_attr_hvac_mode", None) != HVACMode.AUTO  # Not in auto mode
+            or state.operating_mode == OperatingMode.STANDBY  # Bedjet turned itself off
+        ):
+            self._attr_hvac_mode = OPERATING_MODE_MAP[state.operating_mode]
 
         self._max_temp_actual = state.maximum_temperature
         self._min_temp_actual = state.minimum_temperature
