@@ -559,7 +559,6 @@ class BedJet:
             if client.services.get_characteristic(BEDJET2_STATUS_UUID):
                 self._is_v2 = True
                 status_uuid = BEDJET2_STATUS_UUID
-                await asyncio.sleep(3.0)
                 # V2 Init Packet (Wake Up)
                 await client.write_gatt_char(
                     BEDJET2_COMMAND_UUID,
@@ -572,20 +571,11 @@ class BedJet:
 
             _LOGGER.debug("%s: Subscribe to notifications", self.name_and_address)
 
-            for attempt in range(3):
-                try:
-                    await client.start_notify(
-                        status_uuid,
-                        self._notification_handler,
-                        cb={
-                            "notification_discriminator": self._notification_check_handler
-                        },
-                    )
-                    break
-                except Exception:
-                    if attempt == 2:
-                        raise
-                    await asyncio.sleep(1.0)
+            await client.start_notify(
+                status_uuid,
+                self._notification_handler,
+                cb={"notification_discriminator": self._notification_check_handler},
+            )
 
             if not self._is_v2:
                 if self._device_status_data is None:
@@ -986,8 +976,8 @@ class BedJet:
                 await self._client.write_gatt_char(BEDJET3_COMMAND_UUID, command)
 
     async def _run_test_commands(self) -> None:
-        """Run test commands."""
-        if self._client and self._client.is_connected:
+        """Run test commands (BedJet 3 only)."""
+        if self._client and self._client.is_connected and not self._is_v2:
             tag = 0
             for bio_type in (
                 BioDataRequest.BIORHYTHM_NAMES,
