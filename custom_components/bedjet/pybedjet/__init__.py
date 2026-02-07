@@ -25,6 +25,7 @@ from .const import (
     BioDataRequest,
     OperatingMode,
 )
+from .helpers import calculate_maximum_runtime
 from .limiter import EndTimeLimiter, TemperatureLimiter
 
 _LOGGER = logging.getLogger(__name__)
@@ -35,7 +36,7 @@ BEDJET2_SERVICE_UUID = "49535343-fe7d-4ae5-8fa9-9fafd205e455"
 BEDJET2_STATUS_UUID = "49535343-1e4d-4bd9-ba61-23c647249616"
 BEDJET2_COMMAND_UUID = "49535343-8841-43f4-a8d4-ecbe34729bb3"
 BEDJET2_NOTIFICATION_LENGTH = 14
-BEDJET2_TURBO_TEMPERATURE = 42.5
+BEDJET2_TEMPERATURE_MIN_MAX = (19.0, 43.0)
 
 # BedJet 3 UUIDs (ISSC)
 BEDJET3_SERVICE_UUID = "00001000-bed0-0080-aa55-4265644a6574"
@@ -721,14 +722,15 @@ class BedJet:
         target_temperature = self._decode_temperature(data[7])
 
         if operating_mode == OperatingMode.TURBO:
-            # target temperature is not reported when in turbo mode, so we must set it
-            target_temperature = BEDJET2_TURBO_TEMPERATURE
+            # target temperature is not reported when in turbo mode, so we set it to max
+            target_temperature = BEDJET2_TEMPERATURE_MIN_MAX[1]
 
         hours = b5 >> 4
         sub_raw = ((b5 & 0x0F) << 8) | data[6]
         total_seconds = hours * 3600 + (sub_raw * 60 + 32) // 64
         runtime_remaining = timedelta(seconds=total_seconds)
         run_end_time = self._run_end_time_limiter.update(runtime_remaining, _now)
+        maximum_runtime = calculate_maximum_runtime(target_temperature, fan_speed)
 
         # Status flags (byte 8)
         self._beeps_muted = bool(data[8] & 0x80)
@@ -742,11 +744,11 @@ class BedJet:
             operating_mode=operating_mode,
             runtime_remaining=runtime_remaining,
             run_end_time=run_end_time,
-            maximum_runtime=timedelta(hours=10),
+            maximum_runtime=maximum_runtime,
             turbo_time=timedelta(seconds=turbo_time),
             fan_speed=fan_speed,
-            minimum_temperature=19.0,
-            maximum_temperature=43.0,
+            minimum_temperature=BEDJET2_TEMPERATURE_MIN_MAX[0],
+            maximum_temperature=BEDJET2_TEMPERATURE_MIN_MAX[1],
             ambient_temperature=current_temperature,
         )
         self._fire_callbacks()
