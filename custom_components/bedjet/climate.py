@@ -214,7 +214,7 @@ class BedJetClimateEntity(BedJetEntity, ClimateEntity):
             return
 
         if hvac_mode == HVACMode.AUTO:
-            cur_temp = self._attr_current_temperature
+            cur_temp = self.current_temperature
             target_mode = (
                 temperature_to_mode(cur_temp) if cur_temp else OperatingMode.COOL
             )
@@ -276,13 +276,14 @@ class BedJetClimateEntity(BedJetEntity, ClimateEntity):
                 # Wait to pick up the new min/max temp
                 await self.async_update_ha_state(force_refresh=True)
 
+        temp = kwargs.get(ATTR_TEMPERATURE)
+
         if self._attr_hvac_mode == HVACMode.AUTO:
             # Check if we need to change the bedjet mode to allow this temperature
-            temp = kwargs.get(ATTR_TEMPERATURE)
             target_mode = temperature_to_mode(temp)
             if target_mode != self._device.state.operating_mode:
                 _LOGGER.debug(
-                    f"Automatically moving bedjet mode from %s to %s to accomodate temperature %d %s",
+                    f"Automatically moving bedjet mode from %s to %s to accomodate temperature %.1f %s",
                     self._device.state.operating_mode.name,
                     target_mode.name,
                     temp,
@@ -298,7 +299,7 @@ class BedJetClimateEntity(BedJetEntity, ClimateEntity):
             # after setting the effective operating mode above
 
             _LOGGER.debug(
-                "Check valid temperature %d %s (%d %s) in actual bedjet range for mode %s: range %d %s - %d %s",
+                "Check valid temperature %.1f %s (%.1f %s) in actual bedjet range for mode %s: range %.1f %s - %.1f %s",
                 temp,
                 self.temperature_unit,
                 temp,
