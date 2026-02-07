@@ -11,10 +11,13 @@ from homeassistant.components.climate import (
     ClimateEntityFeature,
     HVACMode,
 )
+from homeassistant.components.climate.const import DOMAIN as CLIMATE_DOMAIN
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.util.unit_conversion import TemperatureConverter
 
 from . import BedJetConfigEntry
 from .entity import BedJetEntity
@@ -80,6 +83,17 @@ async def async_setup_entry(
     )
 
 
+def temperature_to_mode(temperature: float):
+    as_fahrenheit = TemperatureConverter.convert(
+        temperature, UnitOfTemperature.CELSIUS, UnitOfTemperature.FAHRENHEIT
+    )
+    if as_fahrenheit <= 78:
+        return OperatingMode.COOL
+    if as_fahrenheit <= 87:
+        return OperatingMode.DRY
+    return OperatingMode.HEAT
+
+
 class BedJetClimateEntity(BedJetEntity, ClimateEntity):
     """Representation of BedJet device."""
 
@@ -99,11 +113,25 @@ class BedJetClimateEntity(BedJetEntity, ClimateEntity):
     ) -> None:
         """Initialize a BedJet climate entity."""
         self._attr_unique_id = device.address
+        self._max_temp_actual = 0.0
+        self._min_temp_actual = 0.0
+
+        self._bedjet_max_temp = (
+            TemperatureConverter.convert(  # maximum per bedjet 3 manual
+                109, UnitOfTemperature.FAHRENHEIT, self.temperature_unit
+            )
+        )
+        self._bedjet_min_temp = (
+            TemperatureConverter.convert(  # minimum per bedjet 3 manual
+                66, UnitOfTemperature.FAHRENHEIT, self.temperature_unit
+            )
+        )
 
         self._attr_hvac_modes = [
             HVACMode.OFF,
             HVACMode.COOL,
             HVACMode.HEAT,
+            HVACMode.AUTO,
         ]
         if not device.is_v2:
             self._attr_hvac_modes.append(HVACMode.DRY)
@@ -117,9 +145,29 @@ class BedJetClimateEntity(BedJetEntity, ClimateEntity):
         state = device.state
         self._attr_current_temperature = state.current_temperature
         self._attr_fan_mode = f"{state.fan_speed}%"
-        self._attr_hvac_mode = OPERATING_MODE_MAP[state.operating_mode]
-        self._attr_max_temp = state.maximum_temperature
-        self._attr_min_temp = state.minimum_temperature
+
+        # Only update hass-displayed mode if:
+        if (
+            getattr(self, "_attr_hvac_mode", None) != HVACMode.AUTO  # Not in auto mode
+            or state.operating_mode == OperatingMode.STANDBY  # Bedjet turned itself off
+        ):
+            self._attr_hvac_mode = OPERATING_MODE_MAP[state.operating_mode]
+
+        self._max_temp_actual = state.maximum_temperature
+        self._min_temp_actual = state.minimum_temperature
+
+        if self._attr_hvac_mode == HVACMode.AUTO:
+            # Set min/max temp to the full range of bedjet temps to allow HA call to set_temperature to also set hvac state.
+            # Per-mode temp ranges validated manually below
+            self._attr_max_temp = max(
+                state.maximum_temperature, self._bedjet_max_temp, self.max_temp
+            )
+            self._attr_min_temp = min(
+                state.minimum_temperature, self._bedjet_min_temp, self.min_temp
+            )
+        else:
+            self._attr_max_temp = self._max_temp_actual
+            self._attr_min_temp = self._min_temp_actual
 
         # DYNAMIC V2 PRESETS: Filter out unsupported items
         base_presets = list(PRESET_MODE_MAP.keys())
@@ -164,7 +212,17 @@ class BedJetClimateEntity(BedJetEntity, ClimateEntity):
         if self._device.is_v2 and hvac_mode == HVACMode.DRY:
             _LOGGER.warning("Dry Mode is not supported on BedJet V2")
             return
-        await self._device.set_operating_mode(HVAC_MODE_MAP[hvac_mode])
+
+        if hvac_mode == HVACMode.AUTO:
+            cur_temp = self.current_temperature
+            target_mode = (
+                temperature_to_mode(cur_temp) if cur_temp else OperatingMode.COOL
+            )
+        else:
+            target_mode = HVAC_MODE_MAP[hvac_mode]
+
+        await self._device.set_operating_mode(target_mode)
+        self._attr_hvac_mode = hvac_mode
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         """Set new preset mode."""
@@ -204,10 +262,63 @@ class BedJetClimateEntity(BedJetEntity, ClimateEntity):
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
         """Set new target temperature."""
+
         if ATTR_HVAC_MODE in kwargs:
-            _LOGGER.warning(
-                "Changing HVAC mode while setting temperature for %s is not supported. "
-                "Please call `climate.set_hvac_mode` first",
-                self.entity_id,
+            new_mode = kwargs[ATTR_HVAC_MODE]
+            if new_mode == HVACMode.AUTO:
+                # if the new mode is auto we'll handle it automatically below, just need to set the climate mode state here
+                self._attr_hvac_mode = new_mode
+            else:
+                _LOGGER.debug(
+                    f"Call to set temperature includes update to bedjet mode: {new_mode}"
+                )
+                await self.async_set_hvac_mode(new_mode)
+                # Wait to pick up the new min/max temp
+                await self.async_update_ha_state(force_refresh=True)
+
+        temp = kwargs.get(ATTR_TEMPERATURE)
+
+        if self._attr_hvac_mode == HVACMode.AUTO:
+            # Check if we need to change the bedjet mode to allow this temperature
+            target_mode = temperature_to_mode(temp)
+            if target_mode != self._device.state.operating_mode:
+                _LOGGER.debug(
+                    "Automatically moving bedjet mode from %s to %s to accomodate temperature %.1f %s",
+                    self._device.state.operating_mode.name,
+                    target_mode.name,
+                    temp,
+                    self.temperature_unit,
+                )
+                await self._device.set_operating_mode(target_mode)
+                await self.async_update_ha_state(force_refresh=True)
+
+            # Changing the bedjet mode changes the valid temp range.
+            # HA evaluates min/max temp _before_ calling this method though...
+            # we set the HA-visible min/max temp to the full bedjet temp range in auto-mode
+            # and validate the temperature against the _actual_ ranges here,
+            # after setting the effective operating mode above
+
+            _LOGGER.debug(
+                "Check valid temperature %.1f %s (%.1f %s) in actual bedjet range for mode %s: range %.1f %s - %.1f %s",
+                temp,
+                self.temperature_unit,
+                temp,
+                self.hass.config.units.temperature_unit,
+                str(self.hvac_mode),
+                self._min_temp_actual,
+                self.temperature_unit,
+                self._max_temp_actual,
+                self.temperature_unit,
             )
-        await self._device.set_temperature(kwargs.get(ATTR_TEMPERATURE))
+            if temp < self._min_temp_actual or temp > self._max_temp_actual:
+                raise ServiceValidationError(
+                    translation_domain=CLIMATE_DOMAIN,
+                    translation_key="temp_out_of_range",
+                    translation_placeholders={
+                        "check_temp": str(temp),
+                        "min_temp": str(self._min_temp_actual),
+                        "max_temp": str(self._max_temp_actual),
+                    },
+                )
+
+        await self._device.set_temperature(temp)

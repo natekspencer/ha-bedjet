@@ -62,6 +62,9 @@
       "turbo_time": {
         "name": "Turbo time"
       },
+      "operating_mode": {
+        "name": "Operating mode"
+      },
       "update_phase": {
         "name": "Update phase",
         "state": {
