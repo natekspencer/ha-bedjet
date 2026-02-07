@@ -25,18 +25,31 @@ from .const import (
     BioDataRequest,
     OperatingMode,
 )
+from .helpers import calculate_maximum_runtime
 from .limiter import EndTimeLimiter, TemperatureLimiter
 
 _LOGGER = logging.getLogger(__name__)
 
-BEDJET_SERVICE_UUID = "00001000-bed0-0080-aa55-4265644a6574"
-BEDJET_STATUS_UUID = "00002000-bed0-0080-aa55-4265644a6574"
-BEDJET_NAME_UUID = "00002001-bed0-0080-aa55-4265644a6574"
-BEDJET_SSID_UUID = "00002002-bed0-0080-aa55-4265644a6574"
-BEDJET_PASSWD_UUID = "00002003-bed0-0080-aa55-4265644a6574"
-BEDJET_COMMAND_UUID = "00002004-bed0-0080-aa55-4265644a6574"
-BEDJET_BIODATA_UUID = "00002005-bed0-0080-aa55-4265644a6574"
-BEDJET_BIODATA_FULL_UUID = "00002006-bed0-0080-aa55-4265644a6574"
+
+# BedJet V2 UUIDs (ISSC)
+BEDJET2_SERVICE_UUID = "49535343-fe7d-4ae5-8fa9-9fafd205e455"
+BEDJET2_STATUS_UUID = "49535343-1e4d-4bd9-ba61-23c647249616"
+BEDJET2_COMMAND_UUID = "49535343-8841-43f4-a8d4-ecbe34729bb3"
+BEDJET2_NOTIFICATION_LENGTH = 14
+BEDJET2_TEMPERATURE_MIN_MAX = (19.0, 43.0)
+
+# BedJet 3 UUIDs (ISSC)
+BEDJET3_SERVICE_UUID = "00001000-bed0-0080-aa55-4265644a6574"
+BEDJET3_STATUS_UUID = "00002000-bed0-0080-aa55-4265644a6574"
+BEDJET3_NAME_UUID = "00002001-bed0-0080-aa55-4265644a6574"
+BEDJET3_SSID_UUID = "00002002-bed0-0080-aa55-4265644a6574"
+BEDJET3_PASSWORD_UUID = "00002003-bed0-0080-aa55-4265644a6574"
+BEDJET3_COMMAND_UUID = "00002004-bed0-0080-aa55-4265644a6574"
+BEDJET3_BIODATA_UUID = "00002005-bed0-0080-aa55-4265644a6574"
+BEDJET3_BIODATA_FULL_UUID = "00002006-bed0-0080-aa55-4265644a6574"
+BEDJET3_NOTIFICATION_LENGTH = 20
+BEDJET3_STATUS_LENGTH = 11
+
 CLIENT_CHARACTERISTIC_CONFIG = "00002902-0000-1000-8000-00805f9b34fb"
 
 DISCONNECT_DELAY = 60
@@ -96,6 +109,9 @@ class BedJet:
     # stale check
     _last_update: datetime | None = None
 
+    # V2 Support Flag
+    _is_v2: bool = False
+
     def __init__(
         self, ble_device: BLEDevice, advertisement_data: AdvertisementData | None = None
     ) -> None:
@@ -130,6 +146,16 @@ class BedJet:
     def address(self) -> str:
         """Return the address."""
         return self._ble_device.address
+
+    @property
+    def is_v2(self) -> bool:
+        """Return True if connected to a V2 device."""
+        return self._is_v2
+
+    @property
+    def model(self) -> str:
+        """Return the model name based on the device version."""
+        return f"BedJet {'V2' if self._is_v2 else '3'}"
 
     @property
     def beeps_muted(self) -> bool | None:
@@ -265,11 +291,65 @@ class BedJet:
 
     async def set_fan_speed(self, fan_speed: int) -> None:
         """Set fan speed."""
+        if self._is_v2:
+            # V2 Protocol: SET_FAN (0x07)
+            # Packet: 58 07 0E [MODE] [STEP] [TEMP] [HRS] [MIN] 00 [CHK]
+
+            # 1. Determine Mode ID from current state
+            mode_id = 0x02  # Default Heat
+            if self.state.operating_mode == OperatingMode.TURBO:
+                mode_id = 0x01
+            elif self.state.operating_mode == OperatingMode.HEAT:
+                mode_id = 0x02
+            elif self.state.operating_mode == OperatingMode.COOL:
+                mode_id = 0x03
+
+            # 2. Calculate Fan Step
+            step = int(fan_speed / 5)
+
+            # 3. Handle Timer Preservation
+            total_seconds = int(self.state.runtime_remaining.total_seconds())
+            hours = total_seconds // 3600
+            minutes = (total_seconds % 3600) // 60
+
+            # 4. Handle Temperature and Mute Flag
+            temp_byte = round(self.state.target_temperature * 2)
+
+            # If currently Muted, add 0x80 to bitmask to PRESERVE mute state
+            if self.beeps_muted:
+                temp_byte |= 0x80
+
+            payload = bytearray(
+                [0x07, 0x0E, mode_id, step, temp_byte, hours, minutes, 0x00]
+            )
+            await self._send_command(payload)
+            return
+
+        # Original V3 Command
         command = bytearray((BedJetCommand.SET_FAN, int(fan_speed / 5) - 1))
         await self._send_command(command)
 
     async def set_led(self, led: bool) -> None:
-        """Set muted."""
+        """Set LED."""
+        if self._is_v2:
+            # V2 Protocol: CMD_SET_SETTINGS (0x11)
+            # Settings Byte: Bit 0 = Mute, Bit 1 = LED Off
+            settings_byte = 0x00
+
+            # Preserve current Mute state
+            if self.beeps_muted:
+                settings_byte |= 0x01
+
+            # Apply new LED state (Bit 1 is "Off")
+            if not led:
+                settings_byte |= 0x02
+
+            await self._send_command(bytearray([0x02, 0x11, settings_byte]))
+            self._led_enabled = led
+            self._fire_callbacks()
+            return
+
+        # Original V3 Command
         button = BedJetButton.LED_ON if led else BedJetButton.LED_OFF
         command = bytearray((BedJetCommand.BUTTON, button))
         await self._send_command(command)
@@ -278,6 +358,25 @@ class BedJet:
 
     async def set_muted(self, muted: bool) -> None:
         """Set muted."""
+        if self._is_v2:
+            # V2 Protocol: CMD_SET_SETTINGS (0x11)
+            # Settings Byte: Bit 0 = Mute, Bit 1 = LED Off
+            settings_byte = 0x00
+
+            # Apply new Mute state
+            if muted:
+                settings_byte |= 0x01
+
+            # Preserve current LED state (Bit 1 is "Off")
+            if self.led_enabled is False:
+                settings_byte |= 0x02
+
+            await self._send_command(bytearray([0x02, 0x11, settings_byte]))
+            self._beeps_muted = muted
+            self._fire_callbacks()
+            return
+
+        # Original V3 Command
         button = BedJetButton.MUTE if muted else BedJetButton.UNMUTE
         command = bytearray((BedJetCommand.BUTTON, button))
         await self._send_command(command)
@@ -286,6 +385,65 @@ class BedJet:
 
     async def set_operating_mode(self, operating_mode: OperatingMode) -> None:
         """Set operating mode."""
+        if self._is_v2:
+            # V2 Protocol: Button Events (0x02)
+            target_btn = None
+            if operating_mode == OperatingMode.TURBO:
+                target_btn = 0x01
+            elif operating_mode == OperatingMode.HEAT:
+                target_btn = 0x02
+            elif operating_mode == OperatingMode.COOL:
+                target_btn = 0x03
+            elif operating_mode != OperatingMode.STANDBY:
+                raise ValueError(f"Unsupported V2 operating mode: {operating_mode}")
+
+            # Handle OFF (Standby)
+            if operating_mode == OperatingMode.STANDBY:
+                # Toggle current mode to turn off
+                curr = self.state.operating_mode
+                off_btn = None
+                if curr == OperatingMode.TURBO:
+                    off_btn = 0x01
+                elif curr == OperatingMode.HEAT:
+                    off_btn = 0x02
+                elif curr == OperatingMode.COOL:
+                    off_btn = 0x03
+
+                if off_btn:
+                    await self._send_command(bytearray([0x02, 0x01, off_btn]))
+                    try:
+                        async with asyncio.timeout(5):
+                            while self.state.operating_mode != OperatingMode.STANDBY:
+                                await asyncio.sleep(0.1)
+                    except TimeoutError:
+                        _LOGGER.warning(
+                            "%s: Could not confirm V2 operating mode change in 5 seconds",
+                            self.name_and_address,
+                        )
+                return
+
+            # Handle ON (Mode Switch)
+            if target_btn:
+                # If already in mode, do nothing (unless it's Turbo, which we might want to refresh)
+                if (
+                    operating_mode != OperatingMode.TURBO
+                    and self.state.operating_mode == operating_mode
+                ):
+                    return
+
+                await self._send_command(bytearray([0x02, 0x01, target_btn]))
+                try:
+                    async with asyncio.timeout(5):
+                        while self.state.operating_mode != operating_mode:
+                            await asyncio.sleep(0.1)
+                except TimeoutError:
+                    _LOGGER.warning(
+                        "%s: Could not confirm V2 operating mode change in 5 seconds",
+                        self.name_and_address,
+                    )
+            return
+
+        # Original V3 Command
         command = bytearray(
             (BedJetCommand.BUTTON, OPERATING_MODE_BUTTON_MAP[operating_mode])
         )
@@ -302,6 +460,13 @@ class BedJet:
 
     async def set_runtime_remaining(self, hours: int = 0, minutes: int = 0) -> None:
         """Set runtime remaining."""
+        if self._is_v2:
+            _LOGGER.warning(
+                "%s: set_runtime_remaining is not supported on V2 devices",
+                self.name_and_address,
+            )
+            return
+
         if minutes >= 60:
             hours += int(minutes / 60)
             minutes = minutes % 60
@@ -310,6 +475,18 @@ class BedJet:
 
     async def set_temperature(self, temperature: float) -> None:
         """Set temperature."""
+        if self._is_v2:
+            # V2 Protocol: CMD_SET_TEMP (0x02 0x07)
+            temp_byte = round(temperature * 2)
+
+            # Preserve Mute State
+            if self.beeps_muted:
+                temp_byte |= 0x80
+
+            await self._send_command(bytearray([0x02, 0x07, temp_byte]))
+            return
+
+        # Original V3 Command
         command = bytearray((BedJetCommand.SET_TEMPERATURE, round(temperature * 2)))
         await self._send_command(command)
 
@@ -317,11 +494,18 @@ class BedJet:
         """Update the BedJet."""
         _LOGGER.debug("%s: Updating", self.name_and_address)
         await self._ensure_connected()
-        await self._read_device_status()
-        await self._read_memory_names()
-        await self._read_biorhythm_names()
-        while self._state.current_temperature == 0:
-            await asyncio.sleep(0.1)
+
+        if not self._is_v2:
+            await self._read_device_status()
+            await self._read_memory_names()
+            await self._read_biorhythm_names()
+
+        try:
+            async with asyncio.timeout(5.0):
+                while self._state.current_temperature == 0:
+                    await asyncio.sleep(0.1)
+        except TimeoutError:
+            pass
 
     async def disconnect(self) -> None:
         """Disconnect from the BedJet."""
@@ -373,23 +557,52 @@ class BedJet:
             self._client = client
             self._reset_disconnect_timer()
 
+            # V2 Protocol Detection
+            if client.services.get_characteristic(BEDJET2_STATUS_UUID):
+                self._is_v2 = True
+                status_uuid = BEDJET2_STATUS_UUID
+                # V2 Init Packet (Wake Up)
+                await client.write_gatt_char(
+                    BEDJET2_COMMAND_UUID,
+                    bytearray([0x58, 0x01, 0x0B, 0x9B]),
+                    response=False,
+                )
+            else:
+                self._is_v2 = False
+                status_uuid = BEDJET3_STATUS_UUID
+
             _LOGGER.debug("%s: Subscribe to notifications", self.name_and_address)
+
             await client.start_notify(
-                BEDJET_STATUS_UUID,
+                status_uuid,
                 self._notification_handler,
                 cb={"notification_discriminator": self._notification_check_handler},
             )
 
-            if self._device_status_data is None:
-                await self._read_device_status()
-            if not self._name:
-                await self._read_device_name()
-            if not self._firmware_version:
-                await self._read_device_firmware()
+            if not self._is_v2:
+                if self._device_status_data is None:
+                    await self._read_device_status()
+                if not self._name:
+                    await self._read_device_name()
+                if not self._firmware_version:
+                    await self._read_device_firmware()
+            else:
+                self._name = "BedJet V2"
+                self._firmware_version = "ISSC V2"
 
     def _notification_check_handler(self, data: bytes) -> bool:
         """Verify notification data matches expected length."""
-        return len(data) == 20
+        if self._is_v2:
+            return len(data) == BEDJET2_NOTIFICATION_LENGTH
+        return len(data) == BEDJET3_NOTIFICATION_LENGTH
+
+    def _decode_temperature(self, value: int) -> float:
+        """Decode temperature from a notification.
+
+        Temperatures are reported in degrees Celsius * 2.
+        BedJet V2 temperatures have a mask 0x7F
+        """
+        return ((value & 0x7F) if self._is_v2 else value) / 2
 
     def _notification_handler(
         self, _sender: BleakGATTCharacteristic, data: bytearray
@@ -403,7 +616,11 @@ class BedJet:
         )
         self._last_update = _now = datetime.now(UTC)
 
-        if len(data) != 20:
+        if self._is_v2:
+            self._handle_v2_notification(data, _now)
+            return
+
+        if len(data) != BEDJET3_NOTIFICATION_LENGTH:
             _LOGGER.debug(
                 "%s: Unexpected notification received: %s",
                 self.name_and_address,
@@ -415,18 +632,18 @@ class BedJet:
         minutes_remaining = data[5]
         seconds_remaining = data[6]
         current_temperature = self._current_temperature_limiter.update(
-            data[7] / 2, _now
+            self._decode_temperature(data[7]), _now
         )
-        target_temperature = data[8] / 2
+        target_temperature = self._decode_temperature(data[8])
         operating_mode = OperatingMode(data[9])
         fan_step = data[10]
         maximum_hours = data[11]
         maximum_minutes = data[12]
-        minimum_temperature = data[13] / 2
-        maximum_temperature = data[14] / 2
+        minimum_temperature = self._decode_temperature(data[13])
+        maximum_temperature = self._decode_temperature(data[14])
         turbo_time = int.from_bytes(data[15 : 15 + 2], byteorder="big")
         ambient_temperature = self._ambient_temperature_limiter.update(
-            data[17] / 2, _now
+            self._decode_temperature(data[17]), _now
         )
         self._shutdown_reason = data[18]
 
@@ -438,19 +655,102 @@ class BedJet:
         fan_speed = (fan_step + 1) * 5
 
         self._state = BedJetState(
-            current_temperature,
-            target_temperature,
-            operating_mode,
-            runtime_remaining,
-            run_end_time,
-            maximum_runtime,
-            timedelta(seconds=turbo_time),
-            fan_speed,
-            minimum_temperature,
-            maximum_temperature,
-            ambient_temperature,
+            current_temperature=current_temperature,
+            target_temperature=target_temperature,
+            operating_mode=operating_mode,
+            runtime_remaining=runtime_remaining,
+            run_end_time=run_end_time,
+            maximum_runtime=maximum_runtime,
+            turbo_time=timedelta(seconds=turbo_time),
+            fan_speed=fan_speed,
+            minimum_temperature=minimum_temperature,
+            maximum_temperature=maximum_temperature,
+            ambient_temperature=ambient_temperature,
         )
 
+        self._fire_callbacks()
+
+    def _handle_v2_notification(self, data: bytearray, _now: datetime) -> None:
+        """Handle ISSC V2 notification responses."""
+        if len(data) != BEDJET2_NOTIFICATION_LENGTH:
+            _LOGGER.debug(
+                "%s: Unexpected notification received: %s",
+                self.name_and_address,
+                data.hex(),
+            )
+            return
+
+        b4, b5 = data[4], data[5]
+        operating_mode = OperatingMode.STANDBY
+        fan_speed = 0
+
+        # Mode and fan detection
+        # COOL: 97-116
+        if 97 <= b4 <= 116:
+            operating_mode = OperatingMode.COOL
+            fan_speed = (b4 - 96) * 5
+        # HEAT: 65-84
+        elif 65 <= b4 <= 84:
+            operating_mode = OperatingMode.HEAT
+            fan_speed = (b4 - 64) * 5
+        # TURBO: 33-52 (0x21-0x34)
+        elif 33 <= b4 <= 52:
+            operating_mode = OperatingMode.TURBO
+            fan_speed = (b4 - 32) * 5
+        # OFF: 0x14 (20) or 0x0E (14) or Byte5=0
+        elif b4 == 0x14 or b4 == 0x0E or b5 == 0x00:
+            operating_mode = OperatingMode.STANDBY
+
+        # Turbo fallback
+        if b5 in (0x01, 0x02, 0x03, 0x04) and operating_mode == OperatingMode.STANDBY:
+            operating_mode = OperatingMode.TURBO
+            fan_speed = 100
+
+        # Retain fan speed if off (prevents UI error)
+        if operating_mode == OperatingMode.STANDBY:
+            fan_speed = self._state.fan_speed if self._state.fan_speed > 0 else 5
+        else:
+            if fan_speed > 0:
+                fan_speed = round(fan_speed / 5.0) * 5
+                fan_speed = max(5, min(100, fan_speed))
+            else:
+                fan_speed = 5
+
+        current_temperature = self._current_temperature_limiter.update(
+            self._decode_temperature(data[3]), _now
+        )
+        target_temperature = self._decode_temperature(data[7])
+
+        if operating_mode == OperatingMode.TURBO:
+            # target temperature is not reported when in turbo mode, so we set it to max
+            target_temperature = BEDJET2_TEMPERATURE_MIN_MAX[1]
+
+        hours = b5 >> 4
+        sub_raw = ((b5 & 0x0F) << 8) | data[6]
+        total_seconds = hours * 3600 + (sub_raw * 60 + 32) // 64
+        runtime_remaining = timedelta(seconds=total_seconds)
+        run_end_time = self._run_end_time_limiter.update(runtime_remaining, _now)
+        maximum_runtime = calculate_maximum_runtime(target_temperature, fan_speed)
+
+        # Status flags (byte 8)
+        self._beeps_muted = bool(data[8] & 0x80)
+        self._led_enabled = not bool(data[3] & 0x80)
+
+        turbo_time = max(0, 600 - data[11])
+
+        self._state = BedJetState(
+            current_temperature=current_temperature,
+            target_temperature=target_temperature,
+            operating_mode=operating_mode,
+            runtime_remaining=runtime_remaining,
+            run_end_time=run_end_time,
+            maximum_runtime=maximum_runtime,
+            turbo_time=timedelta(seconds=turbo_time),
+            fan_speed=fan_speed,
+            minimum_temperature=BEDJET2_TEMPERATURE_MIN_MAX[0],
+            maximum_temperature=BEDJET2_TEMPERATURE_MIN_MAX[1],
+            ambient_temperature=current_temperature,
+        )
         self._fire_callbacks()
 
     def _parse_bio_data_response(self, data: bytearray) -> None:
@@ -459,7 +759,10 @@ class BedJet:
         tag = data[1:2].hex()
         message = "Unknown bio data"
 
-        def parse_text(data: bytearray, length: int | None = None, lead_bits: int = 0):
+        def parse_text(
+            data: bytearray, length: int | None = None, lead_bits: int = 0
+        ) -> str | list[str | list | None] | None:
+            """Parse text from a byte array."""
             if lead_bits:
                 data = data[lead_bits:]
             if not length:
@@ -535,7 +838,8 @@ class BedJet:
             self._client = None
             if client and client.is_connected:
                 try:
-                    await client.stop_notify(BEDJET_STATUS_UUID)
+                    uuid = BEDJET2_STATUS_UUID if self._is_v2 else BEDJET3_STATUS_UUID
+                    await client.stop_notify(uuid)
                 except BleakError:
                     _LOGGER.debug(
                         "%s: Failed to stop notifications",
@@ -545,10 +849,10 @@ class BedJet:
                 await client.disconnect()
 
     async def _read_device_name(self) -> None:
-        """Read device name."""
+        """Read device name (BedJet 3 only)."""
         if self._client and self._client.is_connected:
             _LOGGER.debug("%s: Read device name", self.name_and_address)
-            data = await self._client.read_gatt_char(BEDJET_NAME_UUID)
+            data = await self._client.read_gatt_char(BEDJET3_NAME_UUID)
             if (name := data.decode()) != self.name:
                 _LOGGER.debug(
                     "%s: Actual device name is %s", self.name_and_address, name
@@ -559,10 +863,10 @@ class BedJet:
         """Read device status."""
         if self._client and self._client.is_connected:
             _LOGGER.debug("%s: Read device status", self.name_and_address)
-            data = await self._client.read_gatt_char(BEDJET_STATUS_UUID)
+            data = await self._client.read_gatt_char(BEDJET3_STATUS_UUID)
             self._last_update = datetime.now(UTC)
 
-            if len(data) != 11:
+            if len(data) != BEDJET3_STATUS_LENGTH:
                 _LOGGER.debug(
                     "%s: Unexpected device status received: %s",
                     self.name_and_address,
@@ -616,7 +920,7 @@ class BedJet:
                     (BedJetCommand.GET_BIO, BioDataRequest.FIRMWARE_VERSIONS, tag)
                 )
                 await self._send_command(command)
-                data = await self._client.read_gatt_char(BEDJET_BIODATA_FULL_UUID)
+                data = await self._client.read_gatt_char(BEDJET3_BIODATA_FULL_UUID)
                 self._parse_bio_data_response(data)
                 tag += 1
         if not self._firmware_version:
@@ -632,7 +936,7 @@ class BedJet:
                     (BedJetCommand.GET_BIO, BioDataRequest.BIORHYTHM_NAMES, tag)
                 )
                 await self._send_command(command)
-                data = await self._client.read_gatt_char(BEDJET_BIODATA_FULL_UUID)
+                data = await self._client.read_gatt_char(BEDJET3_BIODATA_FULL_UUID)
                 self._parse_bio_data_response(data)
                 tag += 1
         if not self._biorhythm_names:
@@ -648,7 +952,7 @@ class BedJet:
                     (BedJetCommand.GET_BIO, BioDataRequest.MEMORY_NAMES, tag)
                 )
                 await self._send_command(command)
-                data = await self._client.read_gatt_char(BEDJET_BIODATA_FULL_UUID)
+                data = await self._client.read_gatt_char(BEDJET3_BIODATA_FULL_UUID)
                 self._parse_bio_data_response(data)
                 tag += 1
         if not self._memory_names:
@@ -660,11 +964,24 @@ class BedJet:
             _LOGGER.debug(
                 "%s: Sending command: %s", self.name_and_address, command.hex()
             )
-            await self._client.write_gatt_char(BEDJET_COMMAND_UUID, command)
+
+            if self._is_v2:
+                # WRAPPER: 0x58 + CMD + CHECKSUM
+                v2_payload = bytearray([0x58]) + command
+                total = sum(v2_payload) & 0xFF
+                checksum = (0xFF - total) & 0xFF
+                v2_payload.append(checksum)
+                # Send V2 Packet
+                await self._client.write_gatt_char(
+                    BEDJET2_COMMAND_UUID, v2_payload, response=False
+                )
+            else:
+                # Original V3 Command
+                await self._client.write_gatt_char(BEDJET3_COMMAND_UUID, command)
 
     async def _run_test_commands(self) -> None:
-        """Run test commands."""
-        if self._client and self._client.is_connected:
+        """Run test commands (BedJet 3 only)."""
+        if self._client and self._client.is_connected and not self._is_v2:
             tag = 0
             for bio_type in (
                 BioDataRequest.BIORHYTHM_NAMES,
@@ -679,9 +996,9 @@ class BedJet:
                     self.name_and_address,
                     command.hex(),
                 )
-                await self._client.write_gatt_char(BEDJET_COMMAND_UUID, command, True)
+                await self._client.write_gatt_char(BEDJET3_COMMAND_UUID, command, True)
 
-                data = await self._client.read_gatt_char(BEDJET_BIODATA_FULL_UUID)
+                data = await self._client.read_gatt_char(BEDJET3_BIODATA_FULL_UUID)
                 self._parse_bio_data_response(data)
                 _LOGGER.debug(
                     "%s: %s/%s, %s/%s, %s, %s",
