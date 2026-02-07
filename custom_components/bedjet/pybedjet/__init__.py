@@ -35,6 +35,7 @@ BEDJET2_SERVICE_UUID = "49535343-fe7d-4ae5-8fa9-9fafd205e455"
 BEDJET2_STATUS_UUID = "49535343-1e4d-4bd9-ba61-23c647249616"
 BEDJET2_COMMAND_UUID = "49535343-8841-43f4-a8d4-ecbe34729bb3"
 BEDJET2_NOTIFICATION_LENGTH = 14
+BEDJET2_TURBO_TEMPERATURE = 42.5
 
 # BedJet 3 UUIDs (ISSC)
 BEDJET3_SERVICE_UUID = "00001000-bed0-0080-aa55-4265644a6574"
@@ -719,9 +720,9 @@ class BedJet:
         )
         target_temperature = self._decode_temperature(data[7])
 
-        # Turbo override (109F)
         if operating_mode == OperatingMode.TURBO:
-            target_temperature = 42.7
+            # target temperature is not reported when in turbo mode, so we must set it
+            target_temperature = BEDJET2_TURBO_TEMPERATURE
 
         hours = b5 >> 4
         sub_raw = ((b5 & 0x0F) << 8) | data[6]

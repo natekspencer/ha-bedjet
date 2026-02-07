@@ -155,10 +155,6 @@ class BedJetClimateEntity(BedJetEntity, ClimateEntity):
         )
         self._attr_target_temperature = state.target_temperature
 
-        # VISUAL OVERRIDE: Hardcode Turbo Target Temp for V2
-        if device.is_v2 and state.operating_mode == OperatingMode.TURBO:
-            self._attr_target_temperature = 42.7
-
     async def async_set_fan_mode(self, fan_mode: str) -> None:
         """Set new target fan mode."""
         await self._device.set_fan_speed(int(fan_mode.replace("%", "")))
