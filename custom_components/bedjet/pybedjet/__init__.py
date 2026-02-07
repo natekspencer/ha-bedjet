@@ -594,6 +594,14 @@ class BedJet:
             return len(data) == BEDJET2_NOTIFICATION_LENGTH
         return len(data) == BEDJET3_NOTIFICATION_LENGTH
 
+    def _decode_temperature(self, value: int) -> float:
+        """Decode temperature from a notification.
+
+        Temperatures are reported in degrees Celsius * 2.
+        BedJet V2 temperatures have a mask 0x7F
+        """
+        return ((value & 0x7F) if self._is_v2 else value) / 2
+
     def _notification_handler(
         self, _sender: BleakGATTCharacteristic, data: bytearray
     ) -> None:
@@ -622,18 +630,18 @@ class BedJet:
         minutes_remaining = data[5]
         seconds_remaining = data[6]
         current_temperature = self._current_temperature_limiter.update(
-            data[7] / 2, _now
+            self._decode_temperature(data[7]), _now
         )
-        target_temperature = data[8] / 2
+        target_temperature = self._decode_temperature(data[8])
         operating_mode = OperatingMode(data[9])
         fan_step = data[10]
         maximum_hours = data[11]
         maximum_minutes = data[12]
-        minimum_temperature = data[13] / 2
-        maximum_temperature = data[14] / 2
+        minimum_temperature = self._decode_temperature(data[13])
+        maximum_temperature = self._decode_temperature(data[14])
         turbo_time = int.from_bytes(data[15 : 15 + 2], byteorder="big")
         ambient_temperature = self._ambient_temperature_limiter.update(
-            data[17] / 2, _now
+            self._decode_temperature(data[17]), _now
         )
         self._shutdown_reason = data[18]
 
@@ -706,17 +714,10 @@ class BedJet:
             else:
                 fan_speed = 5
 
-        def decode_temperature(byte_val: int) -> float:
-            """Decode temperature from a V2 notification.
-
-            Temperatures are reported in degrees Celsius * 2.
-            """
-            return (byte_val & 0x7F) / 2
-
         current_temperature = self._current_temperature_limiter.update(
-            decode_temperature(data[3]), _now
+            self._decode_temperature(data[3]), _now
         )
-        target_temperature = decode_temperature(data[7])
+        target_temperature = self._decode_temperature(data[7])
 
         # Turbo override (109F)
         if operating_mode == OperatingMode.TURBO:
