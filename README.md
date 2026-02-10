@@ -1,4 +1,5 @@
 <!-- BEGIN AUTO-GENERATED HEADER -->
+
 [![Release](https://img.shields.io/github/v/release/natekspencer/ha-bedjet?style=for-the-badge)](https://github.com/natekspencer/ha-bedjet/releases)
 [![HACS Badge](https://img.shields.io/badge/HACS-default-41BDF5.svg?style=for-the-badge)](https://github.com/hacs/integration)
 [![Buy Me A Coffee/Beer](https://img.shields.io/badge/Buy_Me_A_☕/🍺-F16061?style=for-the-badge&logo=ko-fi&logoColor=white&labelColor=grey)](https://ko-fi.com/natekspencer)
@@ -6,6 +7,7 @@
 
 ![Downloads](https://img.shields.io/github/downloads/natekspencer/ha-bedjet/total?style=flat-square)
 ![Latest Downloads](https://img.shields.io/github/downloads/natekspencer/ha-bedjet/latest/total?style=flat-square)
+
 <!-- END AUTO-GENERATED HEADER -->
 
 <picture>
@@ -15,7 +17,7 @@
 
 # BedJet for Home Assistant
 
-This project provides various entities to allow control of a [BedJet 3](https://bedjet.com) device.
+This project provides various entities to allow control of a [BedJet V2 or BedJet 3](https://bedjet.com) device.
 
 > ⚠️ **Important**
 >
@@ -24,6 +26,7 @@ This project provides various entities to allow control of a [BedJet 3](https://
 > Before proceeding, **make sure the BedJet app is fully closed**. If you need to use the app (for example, to adjust biorhythm programs), temporarily disable the Home Assistant integration.
 
 <!-- BEGIN AUTO-GENERATED INSTALLATION -->
+
 ## ⬇️ Installation
 
 ### HACS (Recommended)
@@ -69,6 +72,7 @@ Alternatively:
 ![screenshot](images/BedJet3-HA.png)
 
 <!-- BEGIN AUTO-GENERATED FOOTER -->
+
 ## ❤️ Support Me
 
 I maintain this Home Assistant integration in my spare time. If you find it useful, consider supporting development:
