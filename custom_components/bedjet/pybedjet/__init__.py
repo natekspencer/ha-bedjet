@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Callable
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-import logging
 from math import ceil
 
 from bleak import BleakGATTCharacteristic
@@ -134,6 +135,8 @@ class BedJet:
         self._ambient_temperature_limiter = TemperatureLimiter()
         self._run_end_time_limiter = EndTimeLimiter()
 
+        self._callbacks_paused: bool = False
+
     def set_ble_device_and_advertisement_data(
         self, ble_device: BLEDevice, advertisement_data: AdvertisementData
     ) -> None:
@@ -141,6 +144,25 @@ class BedJet:
         self._ble_device = ble_device
         self._advertisement_data = advertisement_data
         _LOGGER.debug("%s: RSSI=%s", self.name_and_address, self.rssi)
+
+    @contextmanager
+    def callbacks_paused(self, fire_callbacks_when_resumed: bool = True):
+        """Temporarily disable callback forwarding.
+
+        Can be used to ensure that an update to the HASS state isnt overwritten by a notification received while a command is pending
+        """
+
+        self._callbacks_paused = True
+        _LOGGER.debug(f"Pausing callback handlers")
+        try:
+            yield
+            if fire_callbacks_when_resumed:
+                self._callbacks_paused = False
+                self._fire_callbacks()
+
+        finally:
+            _LOGGER.debug(f"Reenabling callback handlers")
+            self._callbacks_paused = False
 
     @property
     def address(self) -> str:
@@ -385,6 +407,9 @@ class BedJet:
 
     async def set_operating_mode(self, operating_mode: OperatingMode) -> None:
         """Set operating mode."""
+
+        confirm_change = lambda: self.state.operating_mode == operating_mode
+
         if self._is_v2:
             # V2 Protocol: Button Events (0x02)
             target_btn = None
@@ -410,16 +435,9 @@ class BedJet:
                     off_btn = 0x03
 
                 if off_btn:
-                    await self._send_command(bytearray([0x02, 0x01, off_btn]))
-                    try:
-                        async with asyncio.timeout(5):
-                            while self.state.operating_mode != OperatingMode.STANDBY:
-                                await asyncio.sleep(0.1)
-                    except TimeoutError:
-                        _LOGGER.warning(
-                            "%s: Could not confirm V2 operating mode change in 5 seconds",
-                            self.name_and_address,
-                        )
+                    await self._send_command_and_confirm(
+                        bytearray([0x02, 0x01, off_btn]), confirm_change
+                    )
                 return
 
             # Handle ON (Mode Switch)
@@ -430,33 +448,17 @@ class BedJet:
                     and self.state.operating_mode == operating_mode
                 ):
                     return
-
-                await self._send_command(bytearray([0x02, 0x01, target_btn]))
-                try:
-                    async with asyncio.timeout(5):
-                        while self.state.operating_mode != operating_mode:
-                            await asyncio.sleep(0.1)
-                except TimeoutError:
-                    _LOGGER.warning(
-                        "%s: Could not confirm V2 operating mode change in 5 seconds",
-                        self.name_and_address,
-                    )
+                await self._send_command_and_confirm(
+                    bytearray([0x02, 0x01, target_btn]), confirm_change
+                )
             return
 
         # Original V3 Command
         command = bytearray(
             (BedJetCommand.BUTTON, OPERATING_MODE_BUTTON_MAP[operating_mode])
         )
-        await self._send_command(command)
-        try:
-            async with asyncio.timeout(1):
-                while self.state.operating_mode != operating_mode:
-                    await asyncio.sleep(0.1)
-        except TimeoutError:
-            _LOGGER.warning(
-                "%s: Could not confirm if operating mode was set in 1 second",
-                self.name_and_address,
-            )
+        # Prevent notifications from being forwarded until we confirm we're in the desired state
+        await self._send_command_and_confirm(command, confirm_change)
 
     async def set_runtime_remaining(self, hours: int = 0, minutes: int = 0) -> None:
         """Set runtime remaining."""
@@ -501,9 +503,10 @@ class BedJet:
             await self._read_biorhythm_names()
 
         try:
-            async with asyncio.timeout(5.0):
-                while self._state.current_temperature == 0:
-                    await asyncio.sleep(0.1)
+            with self.callbacks_paused(fire_callbacks_when_resumed=False):
+                async with asyncio.timeout(5.0):
+                    while self._state.current_temperature == 0:
+                        await asyncio.sleep(0.1)
         except TimeoutError:
             pass
 
@@ -514,6 +517,9 @@ class BedJet:
 
     def _fire_callbacks(self) -> None:
         """Fire the callbacks."""
+        if self._callbacks_paused:
+            return
+
         for callback in self._callbacks:
             callback(self._state)
 
@@ -978,6 +984,27 @@ class BedJet:
             else:
                 # Original V3 Command
                 await self._client.write_gatt_char(BEDJET3_COMMAND_UUID, command)
+
+    async def _send_command_and_confirm(
+        self,
+        command: bytearray,
+        confirm: Callable[[], bool],
+        confirmation_timeout_seconds: float = 5.0,
+    ):
+        """Send a command and block callbacks until desired state is confirmed to prevent callbacks from receiving 'stale' state"""
+        with self.callbacks_paused():
+            await self._send_command(command)
+            try:
+                async with asyncio.timeout(confirmation_timeout_seconds):
+                    while not confirm():
+                        await asyncio.sleep(0.1)
+                _LOGGER.debug("Command confirmed!")
+            except TimeoutError:
+                _LOGGER.warning(
+                    "%s: Could not confirm command status change in %.1f seconds",
+                    self.name_and_address,
+                    confirmation_timeout_seconds,
+                )
 
     async def _run_test_commands(self) -> None:
         """Run test commands (BedJet 3 only)."""
