@@ -17,6 +17,9 @@ RUNTIME_TABLE = [
     (float("inf"), [(20, 4), (40, 2), (100, 1)]),
 ]
 
+BEDJET_MAX_TEMP: float = 42.78  # per bedjet 3 manual
+BEDJET_MIN_TEMP: float = 18.89  # per bedjet 3 manual
+
 
 def calculate_maximum_runtime(temperature: float, fan_percent: int) -> timedelta:
     """Return maximum runtime as timedelta based on temperature (°C) and fan percent.
