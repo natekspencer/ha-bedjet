@@ -144,7 +144,7 @@ class BedJetClimateEntity(BedJetEntity, ClimateEntity):
         ):
             new_mode = OPERATING_MODE_MAP[state.operating_mode]
             _LOGGER.debug(
-                f"Bedjet state overwriting hvac mode.  Current mode: {getattr(self, "_attr_hvac_mode", None)}, new mode: {new_mode}"
+                f"Bedjet state overwriting hvac mode.  Current mode: {getattr(self, '_attr_hvac_mode', None)}, new mode: {new_mode}"
             )
             self._attr_hvac_mode = new_mode
 

@@ -153,7 +153,7 @@ class BedJet:
         """
 
         self._callbacks_paused = True
-        _LOGGER.debug(f"Pausing callback handlers")
+        _LOGGER.debug("Pausing callback handlers")
         try:
             yield
             if fire_callbacks_when_resumed:
@@ -161,7 +161,7 @@ class BedJet:
                 self._fire_callbacks()
 
         finally:
-            _LOGGER.debug(f"Reenabling callback handlers")
+            _LOGGER.debug("Reenabling callback handlers")
             self._callbacks_paused = False
 
     @property
