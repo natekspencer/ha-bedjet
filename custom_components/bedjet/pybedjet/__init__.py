@@ -567,17 +567,25 @@ class BedJet:
                     bytearray([0x58, 0x01, 0x0B, 0x9B]),
                     response=False,
                 )
+                await asyncio.sleep(3.0)
             else:
                 self._is_v2 = False
                 status_uuid = BEDJET3_STATUS_UUID
 
             _LOGGER.debug("%s: Subscribe to notifications", self.name_and_address)
 
-            await client.start_notify(
-                status_uuid,
-                self._notification_handler,
-                cb={"notification_discriminator": self._notification_check_handler},
-            )
+            for attempt in range(3):
+                try:
+                    await client.start_notify(
+                        status_uuid,
+                        self._notification_handler,
+                        cb={"notification_discriminator": self._notification_check_handler},
+                    )
+                    break
+                except Exception:
+                    if attempt == 2:
+                        raise
+                    await asyncio.sleep(1.0)
 
             if not self._is_v2:
                 if self._device_status_data is None:
