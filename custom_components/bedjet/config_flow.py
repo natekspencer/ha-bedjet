@@ -117,7 +117,7 @@ class BedjetDeviceConfigFlow(ConfigFlow, domain=DOMAIN):
                     or not (
                         BEDJET3_SERVICE_UUID in discovery.service_uuids
                         or (
-                            BEDJET2_SERVICE_UUID in discovery.service_uuids
+                            discovery.name
                             and discovery.name.startswith(LOCAL_NAME)
                         )
                     )
