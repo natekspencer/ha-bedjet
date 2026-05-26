@@ -579,7 +579,9 @@ class BedJet:
                     await client.start_notify(
                         status_uuid,
                         self._notification_handler,
-                        cb={"notification_discriminator": self._notification_check_handler},
+                        cb={
+                            "notification_discriminator": self._notification_check_handler
+                        },
                     )
                     break
                 except Exception:
