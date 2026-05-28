@@ -18,7 +18,7 @@ from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_ADDRESS
 
 from .const import DOMAIN
-from .pybedjet import BEDJET2_SERVICE_UUID, BEDJET3_SERVICE_UUID, BedJet
+from .pybedjet import BEDJET3_SERVICE_UUID, BedJet
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -116,10 +116,7 @@ class BedjetDeviceConfigFlow(ConfigFlow, domain=DOMAIN):
                     or discovery.address in self._discovered_devices
                     or not (
                         BEDJET3_SERVICE_UUID in discovery.service_uuids
-                        or (
-                            BEDJET2_SERVICE_UUID in discovery.service_uuids
-                            and discovery.name.startswith(LOCAL_NAME)
-                        )
+                        or (discovery.name and discovery.name.startswith(LOCAL_NAME))
                     )
                 ):
                     continue
