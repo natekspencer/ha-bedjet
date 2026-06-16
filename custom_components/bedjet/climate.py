@@ -136,7 +136,11 @@ class BedJetClimateEntity(BedJetEntity, ClimateEntity):
         if device.is_v2 and self._attr_preset_mode is None:
             self._attr_preset_mode = "None"
 
-        self._attr_preset_modes = (
+        # Only reassign preset_modes when it actually changes (e.g. once
+        # memory/biorhythm names are read after connecting). Reassigning an
+        # equivalent list on every poll trips HA's "updating capabilities too
+        # often" warning even though the value never changes in practice.
+        preset_modes = (
             base_presets
             + [
                 name
@@ -153,6 +157,8 @@ class BedJetClimateEntity(BedJetEntity, ClimateEntity):
                 if name
             ]
         )
+        if preset_modes != self._attr_preset_modes:
+            self._attr_preset_modes = preset_modes
         self._attr_target_temperature = state.target_temperature
 
     async def async_set_fan_mode(self, fan_mode: str) -> None:
