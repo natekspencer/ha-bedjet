@@ -992,14 +992,15 @@ class BedJet:
     async def _run_test_commands(self) -> None:
         """Run test commands (BedJet 3 only)."""
         if self._client and self._client.is_connected and not self._is_v2:
-            tag = 0
-            for bio_type in (
-                BioDataRequest.BIORHYTHM_NAMES,
-                BioDataRequest.DEVICE_NAME,
-                BioDataRequest.FIRMWARE_VERSIONS,
-                BioDataRequest.MEMORY_NAMES,
+            for tag, bio_type in enumerate(
+                (
+                    BioDataRequest.BIORHYTHM_NAMES,
+                    BioDataRequest.DEVICE_NAME,
+                    BioDataRequest.FIRMWARE_VERSIONS,
+                    BioDataRequest.MEMORY_NAMES,
+                ),
+                start=1,
             ):
-                tag += 1
                 command = bytearray((BedJetCommand.GET_BIO, bio_type, tag))
                 _LOGGER.debug(
                     "%s: Writing command value: %s",
