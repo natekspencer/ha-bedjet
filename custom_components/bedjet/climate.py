@@ -83,7 +83,6 @@ async def async_setup_entry(
 class BedJetClimateEntity(BedJetEntity, ClimateEntity):
     """Representation of BedJet device."""
 
-    _attr_fan_modes = [f"{speed}%" for speed in (range(5, 101, 5))]
     _attr_name = None
     _attr_supported_features = (
         ClimateEntityFeature.TARGET_TEMPERATURE
@@ -100,6 +99,7 @@ class BedJetClimateEntity(BedJetEntity, ClimateEntity):
         """Initialize a BedJet climate entity."""
         self._attr_unique_id = device.address
 
+        self._attr_fan_modes = [f"{speed}%" for speed in range(5, 101, 5)]
         self._attr_hvac_modes = [
             HVACMode.OFF,
             HVACMode.COOL,
