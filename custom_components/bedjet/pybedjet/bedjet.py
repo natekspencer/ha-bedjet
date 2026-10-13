@@ -63,6 +63,7 @@ OPERATING_MODE_BUTTON_MAP = {
 }
 
 STALE_AFTER_SECONDS = 60
+LIMIT_TEMPERATURE_TIME = timedelta(minutes=5)
 
 
 @dataclass(frozen=True)
@@ -131,6 +132,13 @@ class BedJet:
         # limiters
         self._current_temperature_limiter = TemperatureLimiter()
         self._ambient_temperature_limiter = TemperatureLimiter()
+        # min/max are capability attributes in Home Assistant, so limit them harder
+        self._minimum_temperature_limiter = TemperatureLimiter(
+            min_time=LIMIT_TEMPERATURE_TIME
+        )
+        self._maximum_temperature_limiter = TemperatureLimiter(
+            min_time=LIMIT_TEMPERATURE_TIME
+        )
         self._run_end_time_limiter = EndTimeLimiter()
 
     def set_ble_device_and_advertisement_data(
@@ -648,8 +656,12 @@ class BedJet:
         fan_step = data[10]
         maximum_hours = data[11]
         maximum_minutes = data[12]
-        minimum_temperature = self._decode_temperature(data[13])
-        maximum_temperature = self._decode_temperature(data[14])
+        minimum_temperature = self._minimum_temperature_limiter.update(
+            self._decode_temperature(data[13]), _now
+        )
+        maximum_temperature = self._maximum_temperature_limiter.update(
+            self._decode_temperature(data[14]), _now
+        )
         turbo_time = int.from_bytes(data[15 : 15 + 2], byteorder="big")
         ambient_temperature = self._ambient_temperature_limiter.update(
             self._decode_temperature(data[17]), _now
