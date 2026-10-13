@@ -15,6 +15,7 @@ from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.util.unit_conversion import TemperatureConverter
 
 from . import BedJetConfigEntry
 from .entity import BedJetEntity
@@ -120,8 +121,8 @@ class BedJetClimateEntity(BedJetEntity, ClimateEntity):
         self._attr_current_temperature = state.current_temperature
         self._attr_fan_mode = f"{state.fan_speed}%"
         self._attr_hvac_mode = OPERATING_MODE_MAP[state.operating_mode]
-        self._attr_max_temp = state.maximum_temperature
-        self._attr_min_temp = state.minimum_temperature
+        self._attr_max_temp = self._displayed_limit(state.maximum_temperature)
+        self._attr_min_temp = self._displayed_limit(state.minimum_temperature)
 
         # DYNAMIC V2 PRESETS: Filter out unsupported items
         base_presets = list(PRESET_MODE_MAP.keys())
@@ -156,6 +157,25 @@ class BedJetClimateEntity(BedJetEntity, ClimateEntity):
             ]
         )
         self._attr_target_temperature = state.target_temperature
+
+    def _displayed_limit(self, temperature: float) -> float:
+        """Return a temperature limit matching the whole degree shown in Fahrenheit.
+
+        The frontend rounds limits to whole degrees Fahrenheit, which can land just
+        outside the device range (e.g. 22.5 °C shows as 72 °F, but 72 °F is 22.2 °C)
+        and would then be rejected. The device clamps set temperatures into range.
+        """
+        if (
+            self.coordinator.hass.config.units.temperature_unit
+            != UnitOfTemperature.FAHRENHEIT
+        ):
+            return temperature
+        fahrenheit = TemperatureConverter.convert(
+            temperature, UnitOfTemperature.CELSIUS, UnitOfTemperature.FAHRENHEIT
+        )
+        return TemperatureConverter.convert(
+            round(fahrenheit), UnitOfTemperature.FAHRENHEIT, UnitOfTemperature.CELSIUS
+        )
 
     async def async_set_fan_mode(self, fan_mode: str) -> None:
         """Set new target fan mode."""

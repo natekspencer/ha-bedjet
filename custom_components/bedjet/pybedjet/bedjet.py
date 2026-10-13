@@ -481,7 +481,12 @@ class BedJet:
         await self._send_command(command)
 
     async def set_temperature(self, temperature: float) -> None:
-        """Set temperature."""
+        """Set temperature, clamped to the current minimum/maximum."""
+        state = self._state
+        if state.minimum_temperature < state.maximum_temperature:
+            temperature = min(
+                max(temperature, state.minimum_temperature), state.maximum_temperature
+            )
         if self._is_v2:
             # V2 Protocol: CMD_SET_TEMP (0x02 0x07)
             temp_byte = round(temperature * 2)
