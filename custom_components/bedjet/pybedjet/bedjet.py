@@ -452,22 +452,24 @@ class BedJet:
         Callbacks are paused until then, so notifications still reporting the old
         mode don't briefly revert the state in Home Assistant.
         """
-        self._callbacks_paused = True
-        try:
-            await self._send_command(command)
-            async with asyncio.timeout(OPERATING_MODE_CONFIRM_SECONDS):
-                while self.state.operating_mode != operating_mode:
-                    await asyncio.sleep(0.1)
-        except TimeoutError:
-            _LOGGER.warning(
-                "%s: Could not confirm operating mode change to %s in %s seconds",
-                self.name_and_address,
-                operating_mode.name,
-                OPERATING_MODE_CONFIRM_SECONDS,
-            )
-        finally:
-            self._callbacks_paused = False
-            self._fire_callbacks()
+        async with self._operation_lock:
+            self._callbacks_paused = True
+            try:
+                await self._send_command(command)
+                try:
+                    async with asyncio.timeout(OPERATING_MODE_CONFIRM_SECONDS):
+                        while self.state.operating_mode != operating_mode:
+                            await asyncio.sleep(0.1)
+                except TimeoutError:
+                    _LOGGER.warning(
+                        "%s: Could not confirm operating mode change to %s in %s seconds",
+                        self.name_and_address,
+                        operating_mode.name,
+                        OPERATING_MODE_CONFIRM_SECONDS,
+                    )
+            finally:
+                self._callbacks_paused = False
+                self._fire_callbacks()
 
     async def set_runtime_remaining(self, hours: int = 0, minutes: int = 0) -> None:
         """Set runtime remaining."""
