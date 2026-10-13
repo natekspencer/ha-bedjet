@@ -89,6 +89,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: BedJetConfigEntry) -> bo
         try:
             await bedjet.update()
         except BLEAK_EXCEPTIONS as ex:
+            # Drop the connection so the next update reconnects instead of reusing
+            # a link that still reports connected but no longer responds
+            try:
+                await bedjet.disconnect()
+            except BLEAK_EXCEPTIONS:
+                _LOGGER.debug(
+                    "%s: Failed to disconnect after update error",
+                    bedjet.name_and_address,
+                    exc_info=True,
+                )
             if bedjet.is_data_stale:
                 raise UpdateFailed(str(ex)) from ex
             _LOGGER.debug(
@@ -141,5 +151,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: BedJetConfigEntry) -> bo
 
 async def async_unload_entry(hass: HomeAssistant, entry: BedJetConfigEntry) -> bool:
     """Unload a config entry."""
-    await entry.runtime_data.device.disconnect()
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
+        device = entry.runtime_data.device
+        try:
+            await device.disconnect()
+        except BLEAK_EXCEPTIONS:
+            _LOGGER.debug(
+                "%s: Failed to disconnect during unload",
+                device.name_and_address,
+                exc_info=True,
+            )
+        bluetooth.async_rediscover_address(hass, entry.data[CONF_ADDRESS])
+    return unload_ok
