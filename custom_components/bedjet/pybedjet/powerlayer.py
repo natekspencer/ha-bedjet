@@ -33,6 +33,7 @@ POWERLAYER_COMMAND_UUID = "00002007-bed0-0080-aa55-4265644a6574"
 # POWERLAYER_UNKNOWN2_UUID = "00002008-bed0-0080-aa55-4265644a6574"
 
 # POWERLAYER_NOTIFICATION_LENGTH = 20
+POWERLAYER_NOTIFICATION_MIN_LENGTH = 16  # head and foot angles end at byte 16
 # POWERLAYER_STATUS_LENGTH = 11
 
 DISCONNECT_DELAY = 60
@@ -222,7 +223,7 @@ class PowerLayer:
     def _notification_check_handler(self, data: bytes) -> bool:
         """Verify notification data matches expected length."""
         # TODO: Figure out notification length
-        return len(data) > 0
+        return len(data) >= POWERLAYER_NOTIFICATION_MIN_LENGTH
 
     def _notification_handler(
         self, _sender: BleakGATTCharacteristic, data: bytearray
