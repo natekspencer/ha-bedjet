@@ -52,6 +52,7 @@ BEDJET3_STATUS_LENGTH = 11
 CLIENT_CHARACTERISTIC_CONFIG = "00002902-0000-1000-8000-00805f9b34fb"
 
 DISCONNECT_DELAY = 60
+OPERATING_MODE_CONFIRM_SECONDS = 5
 
 OPERATING_MODE_BUTTON_MAP = {
     OperatingMode.STANDBY: BedJetButton.OFF,
@@ -126,6 +127,7 @@ class BedJet:
         self._expected_disconnect = False
         self.loop = asyncio.get_running_loop()
         self._callbacks: list[Callable[[BedJetState], None]] = []
+        self._callbacks_paused = False
         self._resolve_protocol_event = asyncio.Event()
         self._name: str | None = None
 
@@ -417,16 +419,9 @@ class BedJet:
                     off_btn = 0x03
 
                 if off_btn:
-                    await self._send_command(bytearray([0x02, 0x01, off_btn]))
-                    try:
-                        async with asyncio.timeout(5):
-                            while self.state.operating_mode != OperatingMode.STANDBY:
-                                await asyncio.sleep(0.1)
-                    except TimeoutError:
-                        _LOGGER.warning(
-                            "%s: Could not confirm V2 operating mode change in 5 seconds",
-                            self.name_and_address,
-                        )
+                    await self._send_operating_mode_command(
+                        bytearray([0x02, 0x01, off_btn]), OperatingMode.STANDBY
+                    )
                 return
 
             # Handle ON (Mode Switch)
@@ -438,32 +433,41 @@ class BedJet:
                 ):
                     return
 
-                await self._send_command(bytearray([0x02, 0x01, target_btn]))
-                try:
-                    async with asyncio.timeout(5):
-                        while self.state.operating_mode != operating_mode:
-                            await asyncio.sleep(0.1)
-                except TimeoutError:
-                    _LOGGER.warning(
-                        "%s: Could not confirm V2 operating mode change in 5 seconds",
-                        self.name_and_address,
-                    )
+                await self._send_operating_mode_command(
+                    bytearray([0x02, 0x01, target_btn]), operating_mode
+                )
             return
 
         # Original V3 Command
         command = bytearray(
             (BedJetCommand.BUTTON, OPERATING_MODE_BUTTON_MAP[operating_mode])
         )
-        await self._send_command(command)
+        await self._send_operating_mode_command(command, operating_mode)
+
+    async def _send_operating_mode_command(
+        self, command: bytearray, operating_mode: OperatingMode
+    ) -> None:
+        """Send an operating mode command and wait for the device to confirm it.
+
+        Callbacks are paused until then, so notifications still reporting the old
+        mode don't briefly revert the state in Home Assistant.
+        """
+        self._callbacks_paused = True
         try:
-            async with asyncio.timeout(1):
+            await self._send_command(command)
+            async with asyncio.timeout(OPERATING_MODE_CONFIRM_SECONDS):
                 while self.state.operating_mode != operating_mode:
                     await asyncio.sleep(0.1)
         except TimeoutError:
             _LOGGER.warning(
-                "%s: Could not confirm if operating mode was set in 1 second",
+                "%s: Could not confirm operating mode change to %s in %s seconds",
                 self.name_and_address,
+                operating_mode.name,
+                OPERATING_MODE_CONFIRM_SECONDS,
             )
+        finally:
+            self._callbacks_paused = False
+            self._fire_callbacks()
 
     async def set_runtime_remaining(self, hours: int = 0, minutes: int = 0) -> None:
         """Set runtime remaining."""
@@ -526,6 +530,8 @@ class BedJet:
 
     def _fire_callbacks(self) -> None:
         """Fire the callbacks."""
+        if self._callbacks_paused:
+            return
         for callback in self._callbacks:
             callback(self._state)
 
