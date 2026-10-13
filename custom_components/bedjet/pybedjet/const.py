@@ -87,3 +87,27 @@ class BioDataRequest(IntEnum):
     MEMORY_NAMES = 1
     BIORHYTHM_NAMES = 4
     FIRMWARE_VERSIONS = 32
+
+
+class PowerLayerCommand(IntEnum):
+    """PowerLayer commands."""
+
+    BUTTON = 0x1
+
+
+class PowerLayerButton(IntEnum):
+    """PowerLayer buttons."""
+
+    HEAD_UP = 0x2
+    HEAD_DOWN = 0x3
+    FOOT_UP = 0x4
+    FOOT_DOWN = 0x5
+
+    FLAT = 0x10
+    SNORE = 0x11
+    ZERO_G = 0x12
+    TV = 0x13
+
+    M1 = 0x20
+    M2 = 0x21
+    M3 = 0x22

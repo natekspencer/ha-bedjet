@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from bleak.backends.device import BLEDevice
 from bleak_retry_connector import BLEAK_RETRY_EXCEPTIONS as BLEAK_EXCEPTIONS
 from bluetooth_data_tools import human_readable_name
 import voluptuous as vol
@@ -18,17 +17,19 @@ from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_ADDRESS
 
 from .const import DOMAIN
-from .pybedjet import BEDJET3_SERVICE_UUID, BedJet
+from .pybedjet import BEDJET3_SERVICE_UUID, BedJet, PowerLayer, determine_device
 
 _LOGGER = logging.getLogger(__name__)
 
 LOCAL_NAME = "BEDJET"
 
 
-async def connect_bedjet(device: BLEDevice) -> tuple[bool, str]:
+async def connect_bedjet(discovery_info: BluetoothServiceInfoBleak) -> tuple[bool, str]:
     """Connect to a BedJet and return return status and success or error."""
-    bedjet = BedJet(device)
+    bedjet: BedJet | PowerLayer | None = None
     try:
+        if (bedjet := await determine_device(discovery_info.device)) is None:
+            return (False, "unknown")
         await bedjet.update()
     except BLEAK_EXCEPTIONS:
         return (False, "cannot_connect")
@@ -36,7 +37,8 @@ async def connect_bedjet(device: BLEDevice) -> tuple[bool, str]:
         _LOGGER.exception("Unexpected error")
         return (False, "unknown")
     finally:
-        await bedjet.disconnect()
+        if bedjet is not None:
+            await bedjet.disconnect()
     return (True, bedjet.name)
 
 
@@ -58,7 +60,7 @@ class BedjetDeviceConfigFlow(ConfigFlow, domain=DOMAIN):
         await self.async_set_unique_id(discovery_info.address)
         self._abort_if_unique_id_configured()
 
-        success, name = await connect_bedjet(discovery_info.device)
+        success, name = await connect_bedjet(discovery_info)
         if not success:
             return self.async_abort(reason=name)
 
@@ -98,7 +100,7 @@ class BedjetDeviceConfigFlow(ConfigFlow, domain=DOMAIN):
                 discovery_info.address, raise_on_progress=False
             )
             self._abort_if_unique_id_configured()
-            success, name = await connect_bedjet(discovery_info.device)
+            success, name = await connect_bedjet(discovery_info)
             if success:
                 return self.async_create_entry(
                     title=name,

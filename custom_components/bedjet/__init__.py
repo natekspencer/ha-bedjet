@@ -18,7 +18,7 @@ from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import DEVICE_TIMEOUT, UPDATE_SECONDS
-from .pybedjet import BedJet
+from .pybedjet import BedJet, PowerLayer, determine_device
 
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
@@ -38,7 +38,7 @@ class BedJetData:
     """Data for the BedJet integration."""
 
     title: str
-    device: BedJet
+    device: BedJet | PowerLayer
     coordinator: DataUpdateCoordinator[None]
 
 
@@ -48,13 +48,22 @@ type BedJetConfigEntry = ConfigEntry[BedJetData]
 async def async_setup_entry(hass: HomeAssistant, entry: BedJetConfigEntry) -> bool:
     """Set up BedJet from a config entry."""
     address: str = entry.data[CONF_ADDRESS]
-    ble_device = bluetooth.async_ble_device_from_address(hass, address.upper(), True)
-    if not ble_device:
+    service_info = bluetooth.async_last_service_info(hass, address.upper(), True)
+    if not service_info or not (ble_device := service_info.device):
         raise ConfigEntryNotReady(
             f"Could not find BedJet device with address {address}"
         )
 
-    bedjet = BedJet(ble_device)
+    try:
+        bedjet = await determine_device(ble_device)
+    except BLEAK_EXCEPTIONS as ex:
+        raise ConfigEntryNotReady(
+            f"Could not connect to BedJet device with address {address}"
+        ) from ex
+    if bedjet is None:
+        raise ConfigEntryNotReady(
+            f"Could not determine BedJet type for device with address {address}"
+        )
 
     @callback
     def _async_update_ble(

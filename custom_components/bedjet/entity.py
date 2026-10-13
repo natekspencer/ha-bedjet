@@ -12,7 +12,7 @@ from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
 )
 
-from .pybedjet import BedJet
+from .pybedjet import BedJet, PowerLayer
 
 
 class BedJetEntity(CoordinatorEntity[DataUpdateCoordinator[None]]):
@@ -21,7 +21,10 @@ class BedJetEntity(CoordinatorEntity[DataUpdateCoordinator[None]]):
     _attr_has_entity_name = True
 
     def __init__(
-        self, coordinator: DataUpdateCoordinator[None], device: BedJet, name: str
+        self,
+        coordinator: DataUpdateCoordinator[None],
+        device: BedJet | PowerLayer,
+        name: str,
     ) -> None:
         """Initialize a BedJet entity."""
         super().__init__(coordinator)

@@ -28,6 +28,39 @@
     "button": {
       "sync_clock": {
         "name": "Sync clock"
+      },
+      "head_up": {
+        "name": "Head up"
+      },
+      "head_down": {
+        "name": "Head down"
+      },
+      "foot_up": {
+        "name": "Foot up"
+      },
+      "foot_down": {
+        "name": "Foot down"
+      },
+      "flat": {
+        "name": "Flat"
+      },
+      "snore": {
+        "name": "Snore"
+      },
+      "zero_g": {
+        "name": "Zero G"
+      },
+      "tv": {
+        "name": "TV"
+      },
+      "m1": {
+        "name": "M1"
+      },
+      "m2": {
+        "name": "M2"
+      },
+      "m3": {
+        "name": "M3"
       }
     },
     "number": {
@@ -68,6 +101,12 @@
           "24": "Connection test has completed OK",
           "26": "Firmware update is not needed"
         }
+      },
+      "head_angle": {
+        "name": "Head angle"
+      },
+      "foot_angle": {
+        "name": "Foot angle"
       }
     },
     "switch": {

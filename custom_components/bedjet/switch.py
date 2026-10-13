@@ -50,6 +50,8 @@ async def async_setup_entry(
 ) -> None:
     """Set up the switch platform for BedJet."""
     data = entry.runtime_data
+    if not isinstance(data.device, BedJet):
+        return
     async_add_entities(
         BedJetSwitchEntity(data.coordinator, data.device, entry.title, descriptor)
         for descriptor in SWITCHES

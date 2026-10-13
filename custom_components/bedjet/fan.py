@@ -24,6 +24,8 @@ async def async_setup_entry(
 ) -> None:
     """Set up the fan platform for BedJet."""
     data = entry.runtime_data
+    if not isinstance(data.device, BedJet):
+        return
     async_add_entities([BedJetFanEntity(data.coordinator, data.device, entry.title)])
 
 
