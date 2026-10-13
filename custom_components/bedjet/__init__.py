@@ -54,7 +54,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: BedJetConfigEntry) -> bo
             f"Could not find BedJet device with address {address}"
         )
 
-    bedjet = await determine_device(ble_device)
+    try:
+        bedjet = await determine_device(ble_device)
+    except BLEAK_EXCEPTIONS as ex:
+        raise ConfigEntryNotReady(
+            f"Could not connect to BedJet device with address {address}"
+        ) from ex
     if bedjet is None:
         raise ConfigEntryNotReady(
             f"Could not determine BedJet type for device with address {address}"

@@ -17,7 +17,7 @@ from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_ADDRESS
 
 from .const import DOMAIN
-from .pybedjet import BEDJET3_SERVICE_UUID, determine_device
+from .pybedjet import BEDJET3_SERVICE_UUID, BedJet, PowerLayer, determine_device
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -26,6 +26,7 @@ LOCAL_NAME = "BEDJET"
 
 async def connect_bedjet(discovery_info: BluetoothServiceInfoBleak) -> tuple[bool, str]:
     """Connect to a BedJet and return return status and success or error."""
+    bedjet: BedJet | PowerLayer | None = None
     try:
         if (bedjet := await determine_device(discovery_info.device)) is None:
             return (False, "unknown")
