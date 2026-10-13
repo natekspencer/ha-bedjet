@@ -11,8 +11,7 @@
 <!-- END AUTO-GENERATED HEADER -->
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://brands.home-assistant.io/bedjet/dark_logo.png">
-  <img alt="bedjet logo" src="https://brands.home-assistant.io/bedjet/logo.png">
+  <img alt="bedjet logo" src="custom_components/bedjet/brand/logo.png">
 </picture>
 
 # BedJet for Home Assistant

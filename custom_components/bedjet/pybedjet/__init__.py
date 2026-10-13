@@ -26,17 +26,17 @@ from .powerlayer import (
 )
 
 __all__ = [
-    "BedJet",
-    "BedJetState",
-    "BedJetButton",
-    "BedJetCommand",
-    "OperatingMode",
     "BEDJET2_SERVICE_UUID",
     "BEDJET3_SERVICE_UUID",
-    "PowerLayer",
-    "PowerLayerState",
-    "PowerLayerButton",
     "POWERLAYER_SERVICE_UUID",
+    "BedJet",
+    "BedJetButton",
+    "BedJetCommand",
+    "BedJetState",
+    "OperatingMode",
+    "PowerLayer",
+    "PowerLayerButton",
+    "PowerLayerState",
 ]
 
 _LOGGER = logging.getLogger(__name__)
