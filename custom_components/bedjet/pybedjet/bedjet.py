@@ -462,7 +462,13 @@ class BedJet:
         """
         self._callbacks_paused = True
         try:
-            await self._send_command(command)
+            if not await self._send_command(command):
+                _LOGGER.debug(
+                    "%s: Not connected, skipping operating mode change to %s",
+                    self.name_and_address,
+                    operating_mode.name,
+                )
+                return
             try:
                 async with asyncio.timeout(OPERATING_MODE_CONFIRM_SECONDS):
                     while self.state.operating_mode != operating_mode:
@@ -1008,26 +1014,26 @@ class BedJet:
         if not self._memory_names:
             _LOGGER.debug("%s: Failed to read memory names", self.name_and_address)
 
-    async def _send_command(self, command: bytearray) -> None:
-        """Send a command to the BedJet."""
-        if self._client and self._client.is_connected:
-            _LOGGER.debug(
-                "%s: Sending command: %s", self.name_and_address, command.hex()
-            )
+    async def _send_command(self, command: bytearray) -> bool:
+        """Send a command to the BedJet. Return `False` if not connected."""
+        if not (self._client and self._client.is_connected):
+            return False
+        _LOGGER.debug("%s: Sending command: %s", self.name_and_address, command.hex())
 
-            if self._is_v2:
-                # WRAPPER: 0x58 + CMD + CHECKSUM
-                v2_payload = bytearray([0x58]) + command
-                total = sum(v2_payload) & 0xFF
-                checksum = (0xFF - total) & 0xFF
-                v2_payload.append(checksum)
-                # Send V2 Packet
-                await self._client.write_gatt_char(
-                    BEDJET2_COMMAND_UUID, v2_payload, response=False
-                )
-            else:
-                # Original V3 Command
-                await self._client.write_gatt_char(BEDJET3_COMMAND_UUID, command)
+        if self._is_v2:
+            # WRAPPER: 0x58 + CMD + CHECKSUM
+            v2_payload = bytearray([0x58]) + command
+            total = sum(v2_payload) & 0xFF
+            checksum = (0xFF - total) & 0xFF
+            v2_payload.append(checksum)
+            # Send V2 Packet
+            await self._client.write_gatt_char(
+                BEDJET2_COMMAND_UUID, v2_payload, response=False
+            )
+        else:
+            # Original V3 Command
+            await self._client.write_gatt_char(BEDJET3_COMMAND_UUID, command)
+        return True
 
     async def _run_test_commands(self) -> None:
         """Run test commands (BedJet 3 only)."""
