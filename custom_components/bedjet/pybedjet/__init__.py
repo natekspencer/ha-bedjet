@@ -933,6 +933,9 @@ class BedJet:
                 data = await self._client.read_gatt_char(BEDJET3_BIODATA_FULL_UUID)
                 self._parse_bio_data_response(data)
                 tag += 1
+            else:
+                # Disconnected: bail out instead of spinning the event loop.
+                break
         if not self._firmware_version:
             _LOGGER.debug("%s: Failed to read firmware", self.name_and_address)
 
@@ -949,6 +952,9 @@ class BedJet:
                 data = await self._client.read_gatt_char(BEDJET3_BIODATA_FULL_UUID)
                 self._parse_bio_data_response(data)
                 tag += 1
+            else:
+                # Disconnected: bail out instead of spinning the event loop.
+                break
         if not self._biorhythm_names:
             _LOGGER.debug("%s: Failed to read biorhythm names", self.name_and_address)
 
@@ -965,6 +971,9 @@ class BedJet:
                 data = await self._client.read_gatt_char(BEDJET3_BIODATA_FULL_UUID)
                 self._parse_bio_data_response(data)
                 tag += 1
+            else:
+                # Disconnected: bail out instead of spinning the event loop.
+                break
         if not self._memory_names:
             _LOGGER.debug("%s: Failed to read memory names", self.name_and_address)
 
