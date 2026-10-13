@@ -89,6 +89,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: BedJetConfigEntry) -> bo
         try:
             await bedjet.update()
         except BLEAK_EXCEPTIONS as ex:
+            # Drop the connection so the next update reconnects instead of reusing
+            # a link that still reports connected but no longer responds
+            try:
+                await bedjet.disconnect()
+            except BLEAK_EXCEPTIONS:
+                _LOGGER.debug(
+                    "%s: Failed to disconnect after update error",
+                    bedjet.name_and_address,
+                    exc_info=True,
+                )
             if bedjet.is_data_stale:
                 raise UpdateFailed(str(ex)) from ex
             _LOGGER.debug(
