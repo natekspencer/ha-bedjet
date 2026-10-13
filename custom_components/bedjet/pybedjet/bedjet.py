@@ -394,6 +394,13 @@ class BedJet:
 
     async def set_operating_mode(self, operating_mode: OperatingMode) -> None:
         """Set operating mode."""
+        # Hold the lock while deciding what to send, since V2 decisions depend on
+        # the current mode, which a pending mode change may be about to alter
+        async with self._operation_lock:
+            await self._set_operating_mode(operating_mode)
+
+    async def _set_operating_mode(self, operating_mode: OperatingMode) -> None:
+        """Set operating mode, called with the operation lock held."""
         if self._is_v2:
             # V2 Protocol: Button Events (0x02)
             target_btn = None
@@ -449,27 +456,27 @@ class BedJet:
     ) -> None:
         """Send an operating mode command and wait for the device to confirm it.
 
-        Callbacks are paused until then, so notifications still reporting the old
-        mode don't briefly revert the state in Home Assistant.
+        Must be called with the operation lock held. Callbacks are paused until the
+        device confirms, so notifications still reporting the old mode don't briefly
+        revert the state in Home Assistant.
         """
-        async with self._operation_lock:
-            self._callbacks_paused = True
+        self._callbacks_paused = True
+        try:
+            await self._send_command(command)
             try:
-                await self._send_command(command)
-                try:
-                    async with asyncio.timeout(OPERATING_MODE_CONFIRM_SECONDS):
-                        while self.state.operating_mode != operating_mode:
-                            await asyncio.sleep(0.1)
-                except TimeoutError:
-                    _LOGGER.warning(
-                        "%s: Could not confirm operating mode change to %s in %s seconds",
-                        self.name_and_address,
-                        operating_mode.name,
-                        OPERATING_MODE_CONFIRM_SECONDS,
-                    )
-            finally:
-                self._callbacks_paused = False
-                self._fire_callbacks()
+                async with asyncio.timeout(OPERATING_MODE_CONFIRM_SECONDS):
+                    while self.state.operating_mode != operating_mode:
+                        await asyncio.sleep(0.1)
+            except TimeoutError:
+                _LOGGER.warning(
+                    "%s: Could not confirm operating mode change to %s in %s seconds",
+                    self.name_and_address,
+                    operating_mode.name,
+                    OPERATING_MODE_CONFIRM_SECONDS,
+                )
+        finally:
+            self._callbacks_paused = False
+            self._fire_callbacks()
 
     async def set_runtime_remaining(self, hours: int = 0, minutes: int = 0) -> None:
         """Set runtime remaining."""
