@@ -57,12 +57,13 @@ def _get_service_info(services: BleakGATTServiceCollection) -> str:
 async def determine_device(device: BLEDevice) -> BedJet | PowerLayer | None:
     """Determine device type."""
 
-    async with await establish_connection(
+    client = await establish_connection(
         BleakClientWithServiceCache,
         device,
         device.name or "BedJet",
         use_services_cache=True,
-    ) as client:
+    )
+    try:
         _LOGGER.debug(
             "%s (%s):%s",
             device.name,
@@ -70,6 +71,12 @@ async def determine_device(device: BLEDevice) -> BedJet | PowerLayer | None:
             _get_service_info(client.services),
         )
 
+        # PowerLayer also exposes the BedJet 3 service, so check it first
+        if client.services.get_service(POWERLAYER_UUID):
+            _LOGGER.debug(
+                "%s (%s): Setting up PowerLayer device", device.name, device.address
+            )
+            return PowerLayer(device)
         if client.services.get_service(BEDJET3_SERVICE_UUID):
             _LOGGER.debug(
                 "%s (%s): Setting up BedJet 3 device", device.name, device.address
@@ -80,9 +87,6 @@ async def determine_device(device: BLEDevice) -> BedJet | PowerLayer | None:
                 "%s (%s): Setting up BedJet V2 device", device.name, device.address
             )
             return BedJet(device)
-        if client.services.get_service(POWERLAYER_UUID):
-            _LOGGER.debug(
-                "%s (%s): Setting up PowerLayer device", device.name, device.address
-            )
-            return PowerLayer(device)
+    finally:
+        await client.disconnect()
     return None

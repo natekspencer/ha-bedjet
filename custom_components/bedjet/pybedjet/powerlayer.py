@@ -136,7 +136,8 @@ class PowerLayer:
         return self._state
 
     async def send_button(self, button: PowerLayerButton) -> None:
-        """Set LED."""
+        """Send a button press."""
+        await self._ensure_connected()
         command = bytearray((PowerLayerCommand.BUTTON, button))
         await self._send_command(command)
         self._fire_callbacks()
