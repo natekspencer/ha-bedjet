@@ -52,6 +52,7 @@ BEDJET3_STATUS_LENGTH = 11
 CLIENT_CHARACTERISTIC_CONFIG = "00002902-0000-1000-8000-00805f9b34fb"
 
 DISCONNECT_DELAY = 60
+OPERATING_MODE_CONFIRM_SECONDS = 5
 
 OPERATING_MODE_BUTTON_MAP = {
     OperatingMode.STANDBY: BedJetButton.OFF,
@@ -126,6 +127,7 @@ class BedJet:
         self._expected_disconnect = False
         self.loop = asyncio.get_running_loop()
         self._callbacks: list[Callable[[BedJetState], None]] = []
+        self._callbacks_paused = False
         self._resolve_protocol_event = asyncio.Event()
         self._name: str | None = None
 
@@ -392,6 +394,13 @@ class BedJet:
 
     async def set_operating_mode(self, operating_mode: OperatingMode) -> None:
         """Set operating mode."""
+        # Hold the lock while deciding what to send, since V2 decisions depend on
+        # the current mode, which a pending mode change may be about to alter
+        async with self._operation_lock:
+            await self._set_operating_mode(operating_mode)
+
+    async def _set_operating_mode(self, operating_mode: OperatingMode) -> None:
+        """Set operating mode, called with the operation lock held."""
         if self._is_v2:
             # V2 Protocol: Button Events (0x02)
             target_btn = None
@@ -417,16 +426,9 @@ class BedJet:
                     off_btn = 0x03
 
                 if off_btn:
-                    await self._send_command(bytearray([0x02, 0x01, off_btn]))
-                    try:
-                        async with asyncio.timeout(5):
-                            while self.state.operating_mode != OperatingMode.STANDBY:
-                                await asyncio.sleep(0.1)
-                    except TimeoutError:
-                        _LOGGER.warning(
-                            "%s: Could not confirm V2 operating mode change in 5 seconds",
-                            self.name_and_address,
-                        )
+                    await self._send_operating_mode_command(
+                        bytearray([0x02, 0x01, off_btn]), OperatingMode.STANDBY
+                    )
                 return
 
             # Handle ON (Mode Switch)
@@ -438,32 +440,49 @@ class BedJet:
                 ):
                     return
 
-                await self._send_command(bytearray([0x02, 0x01, target_btn]))
-                try:
-                    async with asyncio.timeout(5):
-                        while self.state.operating_mode != operating_mode:
-                            await asyncio.sleep(0.1)
-                except TimeoutError:
-                    _LOGGER.warning(
-                        "%s: Could not confirm V2 operating mode change in 5 seconds",
-                        self.name_and_address,
-                    )
+                await self._send_operating_mode_command(
+                    bytearray([0x02, 0x01, target_btn]), operating_mode
+                )
             return
 
         # Original V3 Command
         command = bytearray(
             (BedJetCommand.BUTTON, OPERATING_MODE_BUTTON_MAP[operating_mode])
         )
-        await self._send_command(command)
+        await self._send_operating_mode_command(command, operating_mode)
+
+    async def _send_operating_mode_command(
+        self, command: bytearray, operating_mode: OperatingMode
+    ) -> None:
+        """Send an operating mode command and wait for the device to confirm it.
+
+        Must be called with the operation lock held. Callbacks are paused until the
+        device confirms, so notifications still reporting the old mode don't briefly
+        revert the state in Home Assistant.
+        """
+        self._callbacks_paused = True
         try:
-            async with asyncio.timeout(1):
-                while self.state.operating_mode != operating_mode:
-                    await asyncio.sleep(0.1)
-        except TimeoutError:
-            _LOGGER.warning(
-                "%s: Could not confirm if operating mode was set in 1 second",
-                self.name_and_address,
-            )
+            if not await self._send_command(command):
+                _LOGGER.debug(
+                    "%s: Not connected, skipping operating mode change to %s",
+                    self.name_and_address,
+                    operating_mode.name,
+                )
+                return
+            try:
+                async with asyncio.timeout(OPERATING_MODE_CONFIRM_SECONDS):
+                    while self.state.operating_mode != operating_mode:
+                        await asyncio.sleep(0.1)
+            except TimeoutError:
+                _LOGGER.warning(
+                    "%s: Could not confirm operating mode change to %s in %s seconds",
+                    self.name_and_address,
+                    operating_mode.name,
+                    OPERATING_MODE_CONFIRM_SECONDS,
+                )
+        finally:
+            self._callbacks_paused = False
+            self._fire_callbacks()
 
     async def set_runtime_remaining(self, hours: int = 0, minutes: int = 0) -> None:
         """Set runtime remaining."""
@@ -526,6 +545,8 @@ class BedJet:
 
     def _fire_callbacks(self) -> None:
         """Fire the callbacks."""
+        if self._callbacks_paused:
+            return
         for callback in self._callbacks:
             callback(self._state)
 
@@ -993,26 +1014,26 @@ class BedJet:
         if not self._memory_names:
             _LOGGER.debug("%s: Failed to read memory names", self.name_and_address)
 
-    async def _send_command(self, command: bytearray) -> None:
-        """Send a command to the BedJet."""
-        if self._client and self._client.is_connected:
-            _LOGGER.debug(
-                "%s: Sending command: %s", self.name_and_address, command.hex()
-            )
+    async def _send_command(self, command: bytearray) -> bool:
+        """Send a command to the BedJet. Return `False` if not connected."""
+        if not (self._client and self._client.is_connected):
+            return False
+        _LOGGER.debug("%s: Sending command: %s", self.name_and_address, command.hex())
 
-            if self._is_v2:
-                # WRAPPER: 0x58 + CMD + CHECKSUM
-                v2_payload = bytearray([0x58]) + command
-                total = sum(v2_payload) & 0xFF
-                checksum = (0xFF - total) & 0xFF
-                v2_payload.append(checksum)
-                # Send V2 Packet
-                await self._client.write_gatt_char(
-                    BEDJET2_COMMAND_UUID, v2_payload, response=False
-                )
-            else:
-                # Original V3 Command
-                await self._client.write_gatt_char(BEDJET3_COMMAND_UUID, command)
+        if self._is_v2:
+            # WRAPPER: 0x58 + CMD + CHECKSUM
+            v2_payload = bytearray([0x58]) + command
+            total = sum(v2_payload) & 0xFF
+            checksum = (0xFF - total) & 0xFF
+            v2_payload.append(checksum)
+            # Send V2 Packet
+            await self._client.write_gatt_char(
+                BEDJET2_COMMAND_UUID, v2_payload, response=False
+            )
+        else:
+            # Original V3 Command
+            await self._client.write_gatt_char(BEDJET3_COMMAND_UUID, command)
+        return True
 
     async def _run_test_commands(self) -> None:
         """Run test commands (BedJet 3 only)."""
