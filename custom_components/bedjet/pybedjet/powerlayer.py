@@ -236,16 +236,16 @@ class PowerLayer:
         _LOGGER.debug(
             "%s: Notification received: %s", self.name_and_address, data.hex()
         )
-        self._last_update = _now = datetime.now(UTC)
+        # The notification discriminator is only honored on macOS, so check here too
+        if not self._notification_check_handler(data):
+            _LOGGER.debug(
+                "%s: Unexpected notification received: %s",
+                self.name_and_address,
+                data.hex(),
+            )
+            return
 
-        # TODO: Figure out notification length
-        # if len(data) != POWERLAYER_NOTIFICATION_LENGTH:
-        #     _LOGGER.debug(
-        #         "%s: Unexpected notification received: %s",
-        #         self.name_and_address,
-        #         data.hex(),
-        #     )
-        #     return
+        self._last_update = _now = datetime.now(UTC)
 
         head_angle = (int.from_bytes(data[12:14], "big") - 78) / 46.25 + 1.0
         foot_angle = int.from_bytes(data[14:16], "big") / 37.043
