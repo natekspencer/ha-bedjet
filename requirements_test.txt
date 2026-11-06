@@ -1,0 +1,12 @@
+# Home Assistant's bluetooth component, imported by the integration
+aiohasupervisor
+aiousbwatcher
+bleak
+bleak-retry-connector
+bluetooth-adapters
+bluetooth-auto-recovery
+bluetooth-data-tools
+dbus-fast
+habluetooth
+pyserial
+serialx
