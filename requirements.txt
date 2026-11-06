@@ -1,13 +1,12 @@
 # Home Assistant
-homeassistant>=2025.1
-
-# Integration
-bluetooth_adapters
+homeassistant>=2025.11
 
 # Development
+--requirement requirements_test.txt
 colorlog
 isal
 pip>=26.2.1
 pre-commit
+pytest-homeassistant
 ruff>=0.17.0
 zlib-ng
