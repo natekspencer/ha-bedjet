@@ -8,6 +8,26 @@
         }
       }
     },
+    "button": {
+      "head_massage_on": {
+        "default": "mdi:vibrate"
+      },
+      "foot_massage_on": {
+        "default": "mdi:vibrate"
+      },
+      "massage_off": {
+        "default": "mdi:vibrate-off"
+      },
+      "save_m1": {
+        "default": "mdi:content-save"
+      },
+      "save_m2": {
+        "default": "mdi:content-save"
+      },
+      "save_m3": {
+        "default": "mdi:content-save"
+      }
+    },
     "switch": {
       "enable_led": {
         "default": "mdi:led-off",

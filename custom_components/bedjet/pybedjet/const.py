@@ -108,6 +108,19 @@ class PowerLayerButton(IntEnum):
     ZERO_G = 0x12
     TV = 0x13
 
+    # Massage needs the massage kit; the bed doesn't report whether it's running
+    HEAD_MASSAGE_ON = 0x14
+    FOOT_MASSAGE_ON = 0x15
+    MASSAGE_OFF = 0x16  # stops head and foot together
+
     M1 = 0x20
     M2 = 0x21
     M3 = 0x22
+
+    # Saves the current position to a memory slot; the bed jiggles to confirm
+    SAVE_M1 = 0x28
+    SAVE_M2 = 0x29
+    SAVE_M3 = 0x2A
+
+    # Don't add or probe codes 0x50 and up: 0x55/0x56 unpair the remotes and unlink
+    # split king halves, and 0x57/0x58 start a motor test cycle (see issue #73)

@@ -53,6 +53,15 @@
       "tv": {
         "name": "TV"
       },
+      "head_massage_on": {
+        "name": "Head massage on"
+      },
+      "foot_massage_on": {
+        "name": "Foot massage on"
+      },
+      "massage_off": {
+        "name": "Massage off"
+      },
       "m1": {
         "name": "M1"
       },
@@ -61,6 +70,15 @@
       },
       "m3": {
         "name": "M3"
+      },
+      "save_m1": {
+        "name": "Save M1"
+      },
+      "save_m2": {
+        "name": "Save M2"
+      },
+      "save_m3": {
+        "name": "Save M3"
       }
     },
     "number": {
