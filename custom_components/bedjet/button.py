@@ -51,6 +51,13 @@ BUTTONS[PowerLayer] = tuple(
         press_fn=lambda powerlayer, btn=button: powerlayer.send_button(btn),
     )
     for button in PowerLayerButton
+    # Massage is a switch; see switch.py
+    if button
+    not in (
+        PowerLayerButton.HEAD_MASSAGE_ON,
+        PowerLayerButton.FOOT_MASSAGE_ON,
+        PowerLayerButton.MASSAGE_OFF,
+    )
 )
 
 

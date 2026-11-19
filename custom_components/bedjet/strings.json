@@ -53,15 +53,6 @@
       "tv": {
         "name": "TV"
       },
-      "head_massage_on": {
-        "name": "Head massage on"
-      },
-      "foot_massage_on": {
-        "name": "Foot massage on"
-      },
-      "massage_off": {
-        "name": "Massage off"
-      },
       "m1": {
         "name": "M1"
       },
@@ -133,6 +124,12 @@
       },
       "mute_beeps": {
         "name": "Mute beeps"
+      },
+      "head_massage": {
+        "name": "Head massage"
+      },
+      "foot_massage": {
+        "name": "Foot massage"
       }
     }
   }

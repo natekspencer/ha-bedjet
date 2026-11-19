@@ -58,7 +58,7 @@ async def test_setup_powerlayer(hass: HomeAssistant, powerlayer: PowerLayer) -> 
     assert entry.state is ConfigEntryState.LOADED
 
     entries = er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
-    assert {entity.domain for entity in entries} == {"button", "sensor"}
+    assert {entity.domain for entity in entries} == {"button", "sensor", "switch"}
 
     head_angle = next(
         entity.entity_id for entity in entries if entity.translation_key == "head_angle"

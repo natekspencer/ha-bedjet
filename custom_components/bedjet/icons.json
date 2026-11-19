@@ -9,15 +9,6 @@
       }
     },
     "button": {
-      "head_massage_on": {
-        "default": "mdi:vibrate"
-      },
-      "foot_massage_on": {
-        "default": "mdi:vibrate"
-      },
-      "massage_off": {
-        "default": "mdi:vibrate-off"
-      },
       "save_m1": {
         "default": "mdi:content-save"
       },
@@ -40,6 +31,12 @@
         "state": {
           "on": "mdi:volume-off"
         }
+      },
+      "head_massage": {
+        "default": "mdi:vibrate"
+      },
+      "foot_massage": {
+        "default": "mdi:vibrate"
       }
     }
   }

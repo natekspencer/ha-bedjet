@@ -18,9 +18,6 @@ from . import setup_integration
 @pytest.mark.parametrize(
     ("translation_key", "code"),
     [
-        ("head_massage_on", 0x14),
-        ("foot_massage_on", 0x15),
-        ("massage_off", 0x16),
         ("save_m1", 0x28),
         ("save_m2", 0x29),
         ("save_m3", 0x2A),
@@ -48,3 +45,18 @@ async def test_powerlayer_button_sends_code(
         )
 
     send_command.assert_awaited_once_with(bytearray((0x01, code)))
+
+
+async def test_powerlayer_massage_is_not_a_button(
+    hass: HomeAssistant, powerlayer: PowerLayer
+) -> None:
+    """Test massage codes are exposed as switches, not buttons."""
+    entry = await setup_integration(hass, powerlayer)
+    button_keys = {
+        entity.translation_key
+        for entity in er.async_entries_for_config_entry(
+            er.async_get(hass), entry.entry_id
+        )
+        if entity.domain == BUTTON_DOMAIN
+    }
+    assert not button_keys & {"head_massage_on", "foot_massage_on", "massage_off"}
