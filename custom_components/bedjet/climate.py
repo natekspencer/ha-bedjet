@@ -94,7 +94,7 @@ class BedJetClimateEntity(BedJetEntity, ClimateEntity):
         | ClimateEntityFeature.TURN_OFF
         | ClimateEntityFeature.TURN_ON
     )
-    _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    _attr_native_temperature_unit = UnitOfTemperature.CELSIUS
 
     def __init__(
         self, coordinator: DataUpdateCoordinator[None], device: BedJet, name: str
@@ -118,7 +118,7 @@ class BedJetClimateEntity(BedJetEntity, ClimateEntity):
         """Handle updating _attr values."""
         device = self._device
         state = device.state
-        self._attr_current_temperature = state.current_temperature
+        self._attr_native_current_temperature = state.current_temperature
         self._attr_fan_mode = f"{state.fan_speed}%"
         self._attr_hvac_mode = OPERATING_MODE_MAP[state.operating_mode]
         self._attr_max_temp = self._displayed_limit(state.maximum_temperature)
@@ -156,7 +156,7 @@ class BedJetClimateEntity(BedJetEntity, ClimateEntity):
                 if name
             ]
         )
-        self._attr_target_temperature = state.target_temperature
+        self._attr_native_target_temperature = state.target_temperature
 
     def _displayed_limit(self, temperature: float) -> float:
         """Return a temperature limit matching the whole degree shown in Fahrenheit.
