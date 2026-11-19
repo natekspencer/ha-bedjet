@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Generator
+from collections.abc import AsyncGenerator, Generator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from bleak.exc import BleakError
@@ -19,7 +19,7 @@ from . import ADDRESS, NAME, MockConfigEntry, service_info
 
 
 @pytest.fixture(autouse=True)
-def mock_setup_entry() -> Generator[AsyncMock]:
+async def mock_setup_entry(hass: HomeAssistant) -> AsyncGenerator[AsyncMock]:
     """Skip setting up the entry once the flow creates it."""
     with (
         patch(
@@ -28,6 +28,10 @@ def mock_setup_entry() -> Generator[AsyncMock]:
         patch("custom_components.bedjet.async_unload_entry", return_value=True),
     ):
         yield setup_entry
+        # Unload while patched; hass tears down after this fixture and would
+        # otherwise run the real unload against an entry that was never set up
+        for entry in hass.config_entries.async_entries(DOMAIN):
+            await hass.config_entries.async_unload(entry.entry_id)
 
 
 @pytest.fixture
